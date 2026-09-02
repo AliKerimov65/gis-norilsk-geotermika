@@ -483,6 +483,7 @@ function drawIsopleth(cv, o, wliter){
     if(d%5===0) ctx.fillText(d, L-9, py(d)+3); }
   ctx.textAlign='center';
   dates.forEach((d,i)=>{ if(dates.length>14 && i%2) return;
+    if(px(i) > W-R-60) return;   // не наезжать на шкалу цветов
     ctx.beginPath();ctx.moveTo(px(i),H-B);ctx.lineTo(px(i),H-B+6);ctx.stroke();
     ctx.fillText(d.slice(2), px(i), H-B+16); });
   ctx.save();ctx.translate(15,(T+H-B)/2);ctx.rotate(-Math.PI/2);
