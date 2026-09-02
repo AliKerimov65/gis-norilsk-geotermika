@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ГИС-база геотермического мониторинга зданий. г. Норильск · АНО «АНИИГБ» им. М.В. Кима</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{
+    --bg:#0f1c26; --panel:#f5f2ec; --ink:#1d2733; --mut:#6b7684;
+    --c-centr:#2f6fb2; --c-talnakh:#c05a2e; --c-kayerkan:#3d8a5a;
+    --ok:#2e7d32; --risk:#e08a00; --crit:#c8372d; --line:#d8d2c6;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%; font:14px/1.45 "Segoe UI","PT Sans",-apple-system,"Helvetica Neue",Arial,sans-serif; color:var(--ink)}
+  #app{display:grid; grid-template-columns:330px 1fr 420px; grid-template-rows:56px 1fr; height:100vh}
+  header{grid-column:1/4; background:var(--bg); color:#eef2f6; display:flex; align-items:center; gap:18px; padding:0 18px}
+  header h1{font-size:16px; font-weight:600; letter-spacing:.3px; white-space:nowrap}
+  header .sub{font-size:12px; color:#9fb0bf}
+  header .stats{margin-left:auto; display:flex; gap:14px; font-size:12px; align-items:center}
+  header .stats b{font-size:15px}
+  header .dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:1px}
+  #gear{background:none; border:1px solid #3a4c5c; color:#cdd8e2; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:13px}
+  #gear:hover{background:#1b2c3a}
+
+  #side{background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; min-height:0}
+  .chips{display:flex; flex-wrap:wrap; gap:6px; padding:12px 12px 8px}
+  .chip{border:1px solid var(--line); background:#fff; border-radius:16px; padding:4px 12px; font-size:12.5px; cursor:pointer; user-select:none}
+  .chip.on{background:var(--bg); color:#fff; border-color:var(--bg)}
+  .chip .n{color:var(--mut); margin-left:4px}
+  .chip.on .n{color:#b9c6d2}
+  #search{margin:4px 12px 10px; padding:7px 10px; border:1px solid var(--line); border-radius:6px; font-size:13px; width:calc(100% - 24px)}
+  #list{overflow-y:auto; flex:1; border-top:1px solid var(--line)}
+  .item{padding:8px 14px; border-bottom:1px solid #e7e1d6; cursor:pointer; display:flex; justify-content:space-between; gap:8px; align-items:baseline}
+  .item:hover{background:#ece7dd}
+  .item.sel{background:#e2ecf6; border-left:3px solid var(--c-centr); padding-left:11px}
+  .item .a{font-size:13px}
+  .item .a .sdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+  .item .t{font-size:11.5px; color:var(--mut); white-space:nowrap}
+  .item .t.has{color:var(--crit); font-weight:600}
+  #map{background:#dfe6ea; position:relative}
+  .district-label{font-weight:700; font-size:13px; letter-spacing:1px; color:#33404d; background:rgba(255,255,255,.75); padding:2px 8px; border-radius:4px; border:none; box-shadow:none}
+
+  #detail{background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; padding:16px}
+  #detail h2{font-size:17px; margin-bottom:2px}
+  #detail .rayon{font-size:12.5px; color:var(--mut); margin-bottom:10px}
+  #detail .rayon b{font-weight:600}
+  table.kv{width:100%; border-collapse:collapse; font-size:12.8px; margin-bottom:12px}
+  table.kv td{padding:4px 6px; border-bottom:1px solid #e7e1d6; vertical-align:top}
+  table.kv td:first-child{color:var(--mut); width:46%}
+  .sect{font-size:11.5px; text-transform:uppercase; letter-spacing:1px; color:var(--mut); margin:16px 0 6px}
+  canvas.plot{width:100%; background:#fff; border:1px solid var(--line); border-radius:4px}
+  .srcs{font-size:11.5px; color:var(--mut)}
+  .empty{color:var(--mut); font-size:13px; padding:20px 4px; text-align:center}
+  .badge{display:inline-block; font-size:11px; padding:1px 8px; border-radius:10px; margin-left:6px; font-weight:600}
+  .b-ok{background:#d8ecd9; color:var(--ok)}
+  .b-risk{background:#fbe8c8; color:var(--risk)}
+  .b-crit{background:#f7dcd7; color:var(--crit)}
+  .b-card{background:#e3e8ec; color:var(--mut)}
+  .legend{position:absolute; right:14px; bottom:14px; z-index:600; background:rgba(255,255,255,.92); border:1px solid var(--line); border-radius:6px; padding:8px 12px; font-size:12px}
+  .legend div{margin:2px 0}
+  .sw{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px}
+  .wells{display:flex; flex-wrap:wrap; gap:5px; margin:6px 0 8px}
+  .wbtn{border:1px solid var(--line); background:#fff; border-radius:4px; padding:3px 10px; font-size:12px; cursor:pointer}
+  .wbtn.on{background:var(--c-centr); color:#fff; border-color:var(--c-centr)}
+  .depths{display:flex; flex-wrap:wrap; gap:4px; margin:6px 0 8px}
+  .dbtn{border:1px solid var(--line); background:#fff; border-radius:4px; padding:2px 8px; font-size:11.5px; cursor:pointer}
+  .dbtn.on{color:#fff}
+  .note{font-size:11.5px; color:var(--mut); margin-top:4px}
+  .tcalc{width:70px; padding:2px 6px; border:1px solid var(--line); border-radius:4px; font-size:12.5px; text-align:right}
+  #settings{display:none; position:absolute; top:56px; right:0; z-index:900; background:#fff; border:1px solid var(--line); border-radius:0 0 0 8px; box-shadow:-4px 6px 18px rgba(0,0,0,.18); padding:16px; width:320px; font-size:13px}
+  #settings h3{font-size:13px; margin-bottom:8px}
+  #settings label{display:flex; justify-content:space-between; align-items:center; margin:6px 0; gap:8px}
+  #settings input{width:70px; padding:3px 6px; border:1px solid var(--line); border-radius:4px; text-align:right}
+  #settings .save{margin-top:10px; width:100%; padding:6px; background:var(--bg); color:#fff; border:none; border-radius:6px; cursor:pointer}
+  @media (max-width:1100px){ #app{grid-template-columns:270px 1fr 360px} }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div>
+      <h1>ГИС-база геотермического мониторинга зданий. г. Норильск</h1>
+      <div class="sub">АНО «АНИИГБ» им. М.В. Кима</div>
+    </div>
+    <div class="stats" id="hstats"></div>
+    <button id="gear" title="Пороги статусов">⚙ Пороги</button>
+  </header>
+  <div id="side">
+    <div class="chips" id="chips"></div>
+    <input id="search" placeholder="Поиск по адресу…">
+    <div id="list"></div>
+  </div>
+  <div id="map">
+    <div class="legend">
+      <div><span class="sw" style="background:#2e7d32"></span>НОРМА</div>
+      <div><span class="sw" style="background:#e08a00"></span>РИСК</div>
+      <div><span class="sw" style="background:#c8372d"></span>КРИТИЧНО</div>
+      <div><span class="sw" style="background:#8a97a3"></span>без замеров</div>
+      <div><span class="sw" style="background:transparent; border:2px solid #2f6fb2; border-radius:2px"></span>границы районов</div>
+    </div>
+  </div>
+  <div id="detail"><div class="empty">Выберите объект на карте или в списке слева</div></div>
+</div>
+
+<div id="settings">
+  <h3>Превентивные пороги температур грунтов</h3>
+  <label>КРИТИЧНО: T ≥ <span><input id="sTcrit" type="number" step="0.1"> °C</span></label>
+  <label>…на глубине от <span><input id="sDepth" type="number" step="1"> м</span></label>
+  <label>РИСК: тренд потепления &gt; <span><input id="sTrend" type="number" step="0.05"> °C/год</span></label>
+  <label>…на глубине от <span><input id="sTrendDepth" type="number" step="1"> м</span></label>
+  <label>РИСК: превышение Tрасч на <span><input id="sAbove" type="number" step="0.1"> °C</span></label>
+  <button class="save" id="sSave">Применить</button>
+  <div class="note">Пороги — рабочие превентивные значения макета; при наличии проектной (расчётной) температуры основания здания введите её в карточке объекта.</div>
+</div>
+
+<script src="db.b64.js"></script>
+<script>window.__initApp=function(){
+const DCOL = {"Центральный":"#2f6fb2","Талнах":"#c05a2e","Кайеркан":"#3d8a5a"};
+const SCOL = {"НОРМА":"#2e7d32","РИСК":"#e08a00","КРИТИЧНО":"#c8372d"};
+const DB = window.DB;
+
+/* ---------- пороги ---------- */
+const DEF_TH = {tcrit:-0.5, depth:3, trend:0.10, trendDepth:10, above:0.5};
+let TH = Object.assign({}, DEF_TH, JSON.parse(localStorage.getItem('ngk_th')||'{}'));
+function saveTH(){ localStorage.setItem('ngk_th', JSON.stringify(TH)); }
+
+/* ---------- расчётные температуры (ввод пользователя, по адресу) ---------- */
+let TCALC = JSON.parse(localStorage.getItem('ngk_tcalc')||'{}');
+function saveTCALC(){ localStorage.setItem('ngk_tcalc', JSON.stringify(TCALC)); }
+
+/* ---------- аналитика ---------- */
+function interp(pts, d){ // линейная интерполяция профиля [[d,t]...] на глубину d
+  if(!pts.length) return null;
+  if(d<=pts[0][0]) return pts[0][1];
+  if(d>=pts[pts.length-1][0]) return pts[pts.length-1][1];
+  for(let i=1;i<pts.length;i++) if(pts[i][0]>=d){
+    const [d0,t0]=pts[i-1],[d1,t1]=pts[i];
+    return d1===d0? t1 : +(t0+(t1-t0)*(d-d0)/(d1-d0)).toFixed(2);
+  }
+}
+function linreg(xs, ys){ // наклон °C/год (xs — даты ISO)
+  const n=xs.length; if(n<2) return null;
+  const xy=xs.map(d=>(new Date(d)-new Date(xs[0]))/3.15576e10);
+  const mx=xy.reduce((a,b)=>a+b,0)/n, my=ys.reduce((a,b)=>a+b,0)/n;
+  let sxy=0,sxx=0; for(let i=0;i<n;i++){sxy+=(xy[i]-mx)*(ys[i]-my); sxx+=(xy[i]-mx)**2;}
+  return sxx? sxy/sxx : null;
+}
+function wellDepthSeries(wd, depth){ // ряд T(t) скважины на глубине
+  const xs=[], ys=[];
+  wd.s.forEach(([dt,pts])=>{const t=interp(pts,depth); if(t!==null){xs.push(dt); ys.push(t);}});
+  return {xs, ys};
+}
+function objDepthSeries(o, depth){ // средний ряд по скважинам объекта
+  const byDate={};
+  Object.values(o.prof).forEach(wd=>wd.s.forEach(([dt,pts])=>{
+    const t=interp(pts,depth); if(t!==null) (byDate[dt]=byDate[dt]||[]).push(t);
+  }));
+  const xs=Object.keys(byDate).sort();
+  return {xs, ys:xs.map(d=>+(byDate[d].reduce((a,b)=>a+b,0)/byDate[d].length).toFixed(2))};
+}
+function statusOf(o){
+  if(!o.prof) return null;
+  const tc=TCALC[o.a];
+  let crit=false, risk=false;
+  Object.values(o.prof).forEach(wd=>{
+    if(!wd.s.length) return;
+    const last=wd.s[wd.s.length-1][1];
+    last.forEach(([d,t])=>{ if(d>=TH.depth && t>=TH.tcrit) crit=true; });
+    // тренд на контрольной глубине
+    const s=wellDepthSeries(wd, TH.trendDepth);
+    if(s.ys.length>=2){ const k=linreg(s.xs,s.ys); if(k!==null && k>TH.trend) risk=true; }
+  });
+  if(tc!==undefined && o.ngc){
+    Object.values(o.prof).forEach(wd=>{
+      const s=wellDepthSeries(wd, o.ngc.h);
+      if(s.ys.length){ const tlast=s.ys[s.ys.length-1]; if(tlast > tc + TH.above) risk=true; }
+    });
+  }
+  return crit?"КРИТИЧНО":(risk?"РИСК":"НОРМА");
+}
+
+/* ---------- карта ---------- */
+const map = L.map('map',{zoomControl:true}).setView([69.355,88.20], 12);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+const labelPos = {"Центральный":[69.349,88.19],"Талнах":[69.494,88.40],"Кайеркан":[69.352,87.755]};
+for(const [name, rings] of Object.entries(DB.districts)){
+  L.polygon(rings.map(r=>r.map(p=>[p[0],p[1]])),{color:DCOL[name],weight:2.5,fillColor:DCOL[name],fillOpacity:.06,dashArray:'6 4'}).addTo(map);
+  L.marker(labelPos[name],{interactive:false,icon:L.divIcon({className:'district-label',html:name.toUpperCase(),iconSize:null})}).addTo(map);
+}
+let curD='Все', curQ='';
+const markers = {};
+function markerColor(o){ const st=statusOf(o); return st?SCOL[st]:'#8a97a3'; }
+function drawMarkers(){
+  DB.objects.forEach((o,i)=>{
+    if(o.lat===null||o.lat===undefined) return;   // без координат — только в списке
+    const has=!!o.prof;
+    if(markers[i]) map.removeLayer(markers[i]);
+    const m=L.circleMarker([o.lat,o.lon],{radius:has?7:5,color:'#fff',weight:1.2,fillColor:markerColor(o),fillOpacity:.92});
+    m.bindTooltip(o.a+(statusOf(o)?' · '+statusOf(o):''),{direction:'top',offset:[0,-6]});
+    m.on('click',()=>select(i));
+    markers[i]=m;
+  });
+  applyFilter();
+}
+drawMarkers();
+
+/* ---------- шапка ---------- */
+function renderStats(){
+  const n={НОРМА:0,РИСК:0,КРИТИЧНО:0};
+  DB.objects.forEach(o=>{const s=statusOf(o); if(s) n[s]++;});
+  document.getElementById('hstats').innerHTML=
+    `<span><span class="dot" style="background:${SCOL.НОРМА}"></span><b>${n.НОРМА}</b> норма</span>
+     <span><span class="dot" style="background:${SCOL.РИСК}"></span><b>${n.РИСК}</b> риск</span>
+     <span><span class="dot" style="background:${SCOL.КРИТИЧНО}"></span><b>${n.КРИТИЧНО}</b> критично</span>
+     <span><span class="dot" style="background:#8a97a3"></span><b>${DB.objects.length}</b> всего</span>`;
+}
+renderStats();
+
+/* ---------- фильтры/список ---------- */
+const districts=['Все','Центральный','Талнах','Кайеркан'];
+const chipsEl=document.getElementById('chips');
+districts.forEach(d=>{
+  const n=d==='Все'?DB.objects.length:DB.objects.filter(o=>o.d===d).length;
+  const el=document.createElement('span');
+  el.className='chip'+(d==='Все'?' on':'');
+  el.innerHTML=d+`<span class="n">${n}</span>`;
+  el.onclick=()=>{curD=d;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));el.classList.add('on');renderList();
+    if(d!=='Все'&&DB.districts[d]){const pts=DB.districts[d].flat();map.flyToBounds(L.latLngBounds(pts.map(p=>[p[0],p[1]])),{padding:[30,30]});}
+    if(d==='Все'){map.flyTo([69.355,88.20],12);}};
+  chipsEl.appendChild(el);
+});
+document.getElementById('search').addEventListener('input',e=>{curQ=e.target.value.toLowerCase();renderList();});
+function passF(o){ return (curD==='Все'||o.d===curD)&&(!curQ||o.a.toLowerCase().includes(curQ)); }
+function renderList(){
+  const list=document.getElementById('list'); list.innerHTML='';
+  DB.objects.forEach((o,i)=>{
+    if(!passF(o)) return;
+    const st=statusOf(o);
+    const el=document.createElement('div');
+    el.className='item'; el.id='it'+i;
+    const info=o.nm?`${o.nm} зам. · ${(o.d0||'').slice(0,4)}–${(o.d1||'').slice(0,4)}`:(o.d||'');
+    el.innerHTML=`<span class="a">${st?`<span class="sdot" style="background:${SCOL[st]}"></span>`:''}${o.a}</span><span class="t${o.nm?' has':''}">${info}</span>`;
+    el.onclick=()=>select(i,true);
+    list.appendChild(el);
+  });
+  applyFilter();
+}
+function applyFilter(){
+  DB.objects.forEach((o,i)=>{
+    const m=markers[i]; if(!m) return;
+    if(passF(o)){ if(!map.hasLayer(m)) m.addTo(map); }
+    else if(map.hasLayer(m)) map.removeLayer(m);
+  });
+}
+renderList();
+
+/* ---------- ГОСТ-график (ГОСТ 25358-2020, прил. Д, рис. Д.1) ---------- */
+const DATE_COLORS=['#c8372d','#2f6fb2','#3d8a5a','#8a5aa8','#c8871a','#555'];
+function drawGostProfile(cv, o, wliter){
+  const ctx=cv.getContext('2d');
+  const W=cv.clientWidth, H=Math.max(430, cv.clientHeight||430);
+  cv.width=W*2; cv.height=H*2; cv.style.height=H+'px'; ctx.scale(2,2);
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+  const wd=o.prof[wliter]; if(!wd) return;
+  // все точки всех дат
+  let all=[]; wd.s.forEach(([dt,pts])=>pts.forEach(p=>all.push(p)));
+  if(!all.length) return;
+  let tmin=Math.min(0,...all.map(p=>p[1])), tmax=Math.max(0.5,...all.map(p=>p[1]));
+  tmin=Math.floor(tmin-0.5); tmax=Math.ceil(tmax+0.5);
+  let dmax=Math.max(...all.map(p=>p[0])); dmax=Math.ceil(dmax/5)*5;
+  const L=64,R=16,T=120,B=34;            // поля: сверху — шапка + ось t
+  const px=t=>L+(t-tmin)/(tmax-tmin)*(W-L-R);
+  const py=d=>T+d/dmax*(H-T-B);
+  ctx.strokeStyle='#000'; ctx.fillStyle='#000'; ctx.lineWidth=1;
+  // рамка
+  ctx.strokeRect(L,T,W-L-R,H-T-B);
+  // ось t (верх): основные деления 1 °C, промежуточные 0,5 °C
+  ctx.font='10px "Times New Roman",serif'; ctx.textAlign='center';
+  for(let t=tmin;t<=tmax;t++){
+    ctx.beginPath();ctx.moveTo(px(t),T);ctx.lineTo(px(t),T-7);ctx.stroke();
+    ctx.fillText(t.toFixed(0),px(t),T-11);
+    ctx.beginPath();ctx.moveTo(px(t),T);ctx.lineTo(px(t),H-B);ctx.strokeStyle='#d9d9d9';ctx.stroke();ctx.strokeStyle='#000';
+    if(t<tmax){ctx.beginPath();ctx.moveTo(px(t+0.5),T);ctx.lineTo(px(t+0.5),T-4);ctx.stroke();}
+  }
+  ctx.font='italic 12px "Times New Roman",serif'; ctx.fillText('t, °C',(L+W-R)/2,T-30);
+  // ось d (лево): 0 сверху, деления 1 м (подписи через 5 м)
+  ctx.textAlign='right'; ctx.font='10px "Times New Roman",serif';
+  for(let d=0;d<=dmax;d++){
+    ctx.beginPath();ctx.moveTo(L,py(d));ctx.lineTo(L-7,py(d));ctx.stroke();
+    if(d%5===0) ctx.fillText(d,L-11,py(d)+3);
+    if(d<dmax&&dmax<=25){ /* мелкие деления 1 м уже нарисованы */ }
+  }
+  ctx.save(); ctx.translate(16,(T+H-B)/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center'; ctx.font='italic 12px "Times New Roman",serif'; ctx.fillText('d, м',0,0); ctx.restore();
+  // линия t = 0 °C — основная (утолщённая)
+  ctx.strokeStyle='#000'; ctx.lineWidth=1.6;
+  ctx.beginPath();ctx.moveTo(px(0),T);ctx.lineTo(px(0),H-B);ctx.stroke();
+  ctx.lineWidth=1;
+  // шапка по образцу прил. Д (текстовые поля документа)
+  ctx.textAlign='left'; ctx.font='11px "Times New Roman",serif';
+  const dates=wd.s.map(s=>s[0]);
+  ctx.fillText('Объект: '+o.a, 10, 16);
+  ctx.fillText('Скважина № '+wliter+(wd.dep?(', глубина '+wd.dep+' м'):''), 10, 32);
+  ctx.fillText('Даты измерений: '+dates[0]+' — '+dates[dates.length-1], 10, 48);
+  ctx.textAlign='right';
+  ctx.fillText('ГОСТ 25358-2020, прил. Д', W-10, 16);
+  ctx.textAlign='center'; ctx.font='italic 11.5px "Times New Roman",serif';
+  ctx.fillText('График распределения температуры t, °C,', W/2, 62);
+  ctx.fillText('грунта по глубине d, м', W/2, 78);
+  // кривые по датам + точки замеров
+  wd.s.forEach(([dt,pts],si)=>{
+    const col=DATE_COLORS[si%DATE_COLORS.length];
+    ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=1.4;
+    ctx.beginPath();
+    pts.forEach((p,i)=>{const x=px(p[1]),y=py(p[0]); i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+    ctx.stroke();
+    pts.forEach(p=>{ctx.beginPath();ctx.arc(px(p[1]),py(p[0]),2.4,0,7);ctx.fill();});
+    ctx.lineWidth=1;
+  });
+  // легенда дат
+  ctx.textAlign='left'; ctx.font='10.5px "Times New Roman",serif';
+  wd.s.forEach(([dt],si)=>{
+    const col=DATE_COLORS[si%DATE_COLORS.length];
+    const y=H-B+18, x=L+si*96;
+    ctx.strokeStyle=col; ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(x,y-3);ctx.lineTo(x+16,y-3);ctx.stroke();
+    ctx.fillStyle='#000'; ctx.fillText(dt, x+20, y);
+    ctx.lineWidth=1;
+  });
+}
+
+/* ---------- график тренда T(t) ---------- */
+function drawTrend(cv, seriesList){ // seriesList: [{label, xs, ys, color}]
+  const ctx=cv.getContext('2d');
+  const W=cv.clientWidth, H=300; cv.width=W*2; cv.height=H*2; cv.style.height=H+'px'; ctx.scale(2,2);
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+  const L=54,R=14,T=18,B=40;
+  const allX=[...new Set(seriesList.flatMap(s=>s.xs))].sort();
+  const allY=seriesList.flatMap(s=>s.ys);
+  if(!allX.length||!allY.length){return;}
+  let tmin=Math.min(...allY), tmax=Math.max(...allY);
+  if(tmin>0)tmin=0; if(tmax<0)tmax=0;
+  const pad=(tmax-tmin||1)*0.15; tmin-=pad; tmax+=pad;
+  const x0=new Date(allX[0]), x1=new Date(allX[allX.length-1]);
+  const px=d=>L+(new Date(d)-x0)/((x1-x0)||1)*(W-L-R);
+  const py=t=>T+(tmax-t)/(tmax-tmin)*(H-T-B);
+  ctx.strokeStyle='#000'; ctx.strokeRect(L,T,W-L-R,H-T-B);
+  ctx.font='10px "Times New Roman",serif'; ctx.fillStyle='#000';
+  // сетка T (шаг 0,5 °C)
+  ctx.textAlign='right';
+  const step=0.5;
+  for(let t=Math.ceil(tmin/step)*step; t<=tmax; t+=step){
+    ctx.strokeStyle='#ddd'; ctx.beginPath();ctx.moveTo(L,py(t));ctx.lineTo(W-R,py(t));ctx.stroke();
+    ctx.fillText(t.toFixed(1),L-6,py(t)+3);
+  }
+  if(tmin<0&&tmax>0){ctx.strokeStyle='#000';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(L,py(0));ctx.lineTo(W-R,py(0));ctx.stroke();ctx.lineWidth=1;}
+  // подписи дат
+  ctx.textAlign='center';
+  allX.forEach(d=>{ if(allX.length>12 && !d.endsWith('-01')) return;
+    ctx.fillText(d.slice(2,7), px(d), H-B+14); });
+  ctx.save();ctx.translate(14,(T+H-B)/2);ctx.rotate(-Math.PI/2);ctx.font='italic 12px "Times New Roman",serif';ctx.fillText('t, °C',0,0);ctx.restore();
+  ctx.textAlign='center';ctx.font='italic 12px "Times New Roman",serif';ctx.fillText('дата замера',(L+W-R)/2,H-6);
+  // ряды + тренды
+  seriesList.forEach(s=>{
+    ctx.strokeStyle=s.color; ctx.fillStyle=s.color; ctx.lineWidth=1.6;
+    ctx.beginPath();
+    s.xs.forEach((d,i)=>{const x=px(d),y=py(s.ys[i]); i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+    ctx.stroke();
+    s.xs.forEach((d,i)=>{ctx.beginPath();ctx.arc(px(d),py(s.ys[i]),2.6,0,7);ctx.fill();});
+    const k=linreg(s.xs,s.ys);
+    if(k!==null){ // линия тренда
+      ctx.setLineDash([6,4]); ctx.lineWidth=1.2;
+      const ya=s.ys[0], yb=ya+k*((x1-x0)/3.15576e10);
+      ctx.beginPath();ctx.moveTo(px(s.xs[0]),py(ya));ctx.lineTo(px(s.xs[s.xs.length-1]),py(yb));ctx.stroke();
+      ctx.setLineDash([]); s.slope=k;
+    }
+    ctx.lineWidth=1;
+  });
+  // легенда
+  ctx.textAlign='left'; ctx.font='10.5px "Times New Roman",serif';
+  seriesList.forEach((s,i)=>{
+    const y=T+12+i*14;
+    ctx.strokeStyle=s.color; ctx.lineWidth=2; ctx.beginPath();ctx.moveTo(L+8,y-3);ctx.lineTo(L+24,y-3);ctx.stroke();
+    ctx.fillStyle='#000';
+    ctx.fillText(s.label+(s.slope!==null&&s.slope!==undefined?`  (${s.slope>0?'+':''}${s.slope.toFixed(2)} °C/год)`:''), L+28, y);
+    ctx.lineWidth=1;
+  });
+}
+
+/* ---------- карточка объекта ---------- */
+function fmt(v,u){return (v===null||v===undefined)?'—':v+(u||'')}
+let curObj=null, curWell=null, curDepths=new Set();
+function select(i,fromList){
+  const o=DB.objects[i]; curObj=o;
+  document.querySelectorAll('.item').forEach(e=>e.classList.remove('sel'));
+  const li=document.getElementById('it'+i); if(li){li.classList.add('sel'); li.scrollIntoView({block:'nearest'});}
+  if(o.lat!=null){
+    if(!fromList) map.panTo([o.lat,o.lon]);
+    const m=markers[i];
+    if(m){ m.setStyle({radius:9,weight:2,color:'#1d2733'});
+      setTimeout(()=>m.setStyle({radius:o.prof?7:5,weight:1.2,color:'#fff'}),1200); }
+  }
+  renderDetail(o);
+}
+function renderDetail(o){
+  const d=document.getElementById('detail');
+  const st=statusOf(o);
+  const prec={'точный':'точный адрес (OSM)','по улице':'центроид улицы','nominatim':'Nominatim/OSM'}[o.p]||'—';
+  const wells=o.prof?Object.keys(o.prof):[];
+  if(!curWell||!wells.includes(curWell)) curWell=wells[0]||null;
+  // доступные глубины объекта
+  const depthsAvail=o.amp?Object.keys(o.amp).map(Number):[];
+  if(!curDepths.size) depthsAvail.filter(x=>[3,5,7,10,12,15].includes(x)).slice(0,4).forEach(x=>curDepths.add(x));
+  const tc=TCALC[o.a];
+  d.innerHTML=`
+    <h2>${o.a}<span class="badge ${st?('b-'+{НОРМА:'ok',РИСК:'risk',КРИТИЧНО:'crit'}[st]):'b-card'}">${st||'карточка'}</span></h2>
+    <div class="rayon">Район: <b style="color:${DCOL[o.d]||'#666'}">${o.d||'не определён'}</b> · г. Норильск</div>
+    <div class="sect">Общие сведения</div>
+    <table class="kv">
+      <tr><td>Координаты</td><td>${fmt(o.lat)}, ${fmt(o.lon)} <span style="color:var(--mut)">(${prec})</span></td></tr>
+      <tr><td>Год постройки</td><td>${fmt(o.y)}</td></tr>
+      <tr><td>Серия / тип</td><td>${fmt(o.s)}</td></tr>
+      <tr><td>Термометрических скважин</td><td>${wells.length||fmt(o.nw,' шт.')}</td></tr>
+      ${wells.length?`<tr><td>Литеры скважин</td><td>${wells.join(', ')}</td></tr>`:''}
+      <tr><td>Период наблюдений</td><td>${o.d0||'—'} … ${o.d1||'—'}</td></tr>
+    </table>
+    ${o.prof?`
+    <div class="sect">Тепловое состояние основания</div>
+    <table class="kv">
+      <tr><td>Глубина нулевых годовых колебаний (НГК)</td><td>${o.ngc?fmt(o.ngc.h,' м'):'—'}</td></tr>
+      <tr><td>T грунта на уровне НГК (средняя)</td><td>${o.ngc?fmt(o.ngc.t,' °C'):'—'}</td></tr>
+      <tr><td>Расчётная (проектная) температура</td><td><input class="tcalc" id="tcalcInp" type="number" step="0.1" value="${tc!==undefined?tc:''}" placeholder="—"> °C</td></tr>
+      <tr><td>Статус (превентивный)</td><td><b style="color:${SCOL[st]}">${st}</b></td></tr>
+    </table>
+    <div class="note">Глубина НГК — по амплитуде годовых колебаний ≤ 0,1 °C в рядах замеров (оценка макета). Расчётная температура вводится из проектной документации и сохраняется локально.</div>
+    <div class="sect">График распределения температуры по глубине · ГОСТ 25358-2020, прил. Д</div>
+    <div class="wells" id="wellBtns"></div>
+    <canvas class="plot" id="gostChart"></canvas>
+    <div class="sect">Тренд температур по глубинам</div>
+    <div class="note" style="margin:0 0 2px">Скважина: <b id="trWell">${curWell}</b> (та же, что на профиле). Глубины:</div>
+    <div class="depths" id="depthBtns"></div>
+    <canvas class="plot" id="trendChart"></canvas>
+    `:'<div class="empty" style="text-align:left;padding:8px 0">Числовые замеры по объекту в файлах не найдены —<br>запись зарезервирована в структуре БД.</div>'}
+    <div class="sect">Источники данных</div>
+    <div class="srcs">${o.src.join('<br>')}</div>`;
+  if(o.prof){
+    // кнопки скважин
+    const wb=document.getElementById('wellBtns');
+    wells.forEach(w=>{
+      const b=document.createElement('button');
+      b.className='wbtn'+(w===curWell?' on':''); b.textContent=w;
+      b.onclick=()=>{curWell=w; renderDetail(o);};
+      wb.appendChild(b);
+    });
+    // кнопки глубин
+    const db=document.getElementById('depthBtns');
+    depthsAvail.forEach(dep=>{
+      const b=document.createElement('button');
+      const on=curDepths.has(dep);
+      b.className='dbtn'+(on?' on':''); b.textContent=dep+' м';
+      if(on) b.style.background=DATE_COLORS[[...curDepths].indexOf(dep)%DATE_COLORS.length], b.style.borderColor=b.style.background;
+      b.onclick=()=>{ curDepths.has(dep)?curDepths.delete(dep):curDepths.add(dep); renderDetail(o); };
+      db.appendChild(b);
+    });
+    drawGostProfile(document.getElementById('gostChart'), o, curWell);
+    // ряды тренда по выбранным глубинам выбранной скважины
+    const wd=o.prof[curWell];
+    const list=[...curDepths].sort((a,b)=>a-b).map((dep,i)=>{
+      const s=wellDepthSeries(wd, dep);
+      return {label:dep+' м', xs:s.xs, ys:s.ys, color:DATE_COLORS[i%DATE_COLORS.length]};
+    }).filter(s=>s.ys.length>=2);
+    drawTrend(document.getElementById('trendChart'), list);
+    // ввод расчётной температуры
+    const inp=document.getElementById('tcalcInp');
+    inp.onchange=()=>{ const v=parseFloat(inp.value);
+      if(isNaN(v)) delete TCALC[o.a]; else TCALC[o.a]=v;
+      saveTCALC(); drawMarkers(); renderStats(); renderDetail(o); };
+  }
+}
+
+/* ---------- настройки порогов ---------- */
+const setEl=document.getElementById('settings');
+document.getElementById('gear').onclick=()=>{
+  setEl.style.display=setEl.style.display==='block'?'none':'block';
+  sTcrit.value=TH.tcrit; sDepth.value=TH.depth; sTrend.value=TH.trend; sTrendDepth.value=TH.trendDepth; sAbove.value=TH.above;
+};
+document.getElementById('sSave').onclick=()=>{
+  TH={tcrit:+sTcrit.value, depth:+sDepth.value, trend:+sTrend.value, trendDepth:+sTrendDepth.value, above:+sAbove.value};
+  saveTH(); setEl.style.display='none';
+  drawMarkers(); renderStats(); renderList(); if(curObj) renderDetail(curObj);
+});
+
+};
+(async()=>{try{
+const bin=Uint8Array.from(atob(window.__DBGZ.replace(/\s/g,"")),c=>c.charCodeAt(0));
+const txt=await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+window.DB=JSON.parse(txt); window.__initApp();
+}catch(e){document.getElementById("detail").innerHTML="Ошибка загрузки данных: "+e;}})();
+</script>
+</body>
+</html>
