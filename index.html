@@ -431,6 +431,7 @@ function drawIsopleth(cv, o, wliter){
   const py=d=>T+d/dmax*(H-T-B);
   // заливка поля (билинейная интерполяция по соседним датам)
   const img=ctx.createImageData(W-L-R, H-T-B);
+  const di=dates.map(d=>new Date(d).getTime());
   for(let yy=0; yy<H-T-B; yy++){
     const d=yy/(H-T-B)*dmax;
     let di2=depths.findIndex(x=>x>=d); if(di2<0)di2=depths.length-1; if(di2===0)di2=1;
