@@ -285,14 +285,14 @@
   </div>
 </div>
 
-<script src="db_p1.js?v=83adee6f"></script>
-<script src="db_p2.js?v=83adee6f"></script>
-<script src="db_p3.js?v=83adee6f"></script>
-<script src="db_p4.js?v=83adee6f"></script>
-<script src="db_p5.js?v=83adee6f"></script>
-<script src="db_p6.js?v=83adee6f"></script>
-<script src="db_p7.js?v=83adee6f"></script>
-<script src="db_p8.js?v=83adee6f"></script>
+<script src="db_p1.js?v=5c7d5cfb"></script>
+<script src="db_p2.js?v=5c7d5cfb"></script>
+<script src="db_p3.js?v=5c7d5cfb"></script>
+<script src="db_p4.js?v=5c7d5cfb"></script>
+<script src="db_p5.js?v=5c7d5cfb"></script>
+<script src="db_p6.js?v=5c7d5cfb"></script>
+<script src="db_p7.js?v=5c7d5cfb"></script>
+<script src="db_p8.js?v=5c7d5cfb"></script>
 
 <div id="loginModal">
   <form class="lbox" id="loginForm">
@@ -1394,9 +1394,9 @@ function assess(o){
       total+=rows.length;
       rows.forEach(([m,s])=>{ if(/корроз|обнажен|оголен|скол|деструкц/i.test(s)) heavy++; });
     });
-    sD=Math.max(0, Math.round(100-Math.min(40,total*0.5)-heavy*3));
+    sD=Math.max(0, Math.round(100-Math.min(25,total*0.15)-Math.min(35,heavy*1.5)));
     notes.defects.push(`зарегистрировано дефектов и повреждений несущих конструкций: ${total}, из них тяжёлых (деструкция, сколы, обнажение/коррозия арматуры): ${heavy}`);
-    notes.defects.push('оценка объёма: −0,5 балла за дефект (не более −40), −3 балла за тяжёлый дефект');
+    notes.defects.push('оценка объёма: −0,15 балла за дефект (не более −25), −1,5 балла за тяжёлый дефект (не более −35)');
   } else notes.defects.push('нет данных обследований конструкций — направление не оценивается');
   const parts=[sG,sS,sD].filter(x=>x!==null&&isFinite(x));
   const total=parts.length?Math.min(...parts):null;
@@ -1678,7 +1678,7 @@ function enterApp(role){
 })();
 
 };
-const ENC={saltV:"3tguKS9RowbekRTUwZEPdw==",ivV:"i2fzf7Zcgl1zSJdi",wrapV:"6kQLDf3v7ss4q5kE5MQ68VCR1kgfmt8t+Z+h5vqIM0668dpuSdAC88P5XqpSz6oU",saltE:"2yHKEJ9osjavq4ZaVKa7Jw==",ivE:"eAwpYkzmGRbh2FZa",wrapE:"ZNf6VJ30tjElgAmrpOIZ8NkJARgefbmluDHFEcDJPfoYBD3B4AoCIxqHmyHYXDvR",ivD:"XVPeleEnZq8lpn+8"};
+const ENC={saltV:"OMS1glwodCHwgcfoM7Djrw==",ivV:"jYse1zA53ZoZXkrZ",wrapV:"ngsiHufnCWGvqU+ZnuwfOgTAKc5dP86IO/uTuJFz/5tbhm3e97REyWMMwPM23UKF",saltE:"pXDacxQplW1t760HR/Gq1A==",ivE:"mZJ7cdVpUnjRdSx1",wrapE:"HMfNuGeoBH3tBXcSOMehWfhd7jpdDgaeemKmxMe6Qvg3/xEu7S/sV541dpa2XsFB",ivD:"eQQ7tQOutJ6ChzQT"};
 function enterApp(role){ sessionStorage.setItem("ngk_role",role); document.body.classList.add("authed","role-"+role); document.getElementById("loginModal").style.display="none"; document.getElementById("roleBadge").textContent=role==="edit"?"оператор":"наблюдатель"; }
 const _b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 async function _unwrap(pw,saltB,ivB,wrapB){
