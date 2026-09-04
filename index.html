@@ -192,6 +192,21 @@
   .rsn.r-crit{color:var(--crit)}
   .rsn.r-risk{color:#a86400}
   .rsn.r-ok{color:var(--ok)}
+  /* ---------- телефонограммы (скрытый раздел) ---------- */
+  .tglock{border:none; background:none; cursor:pointer; font-size:12px; color:var(--mut); padding:1px 4px}
+  .tglock:hover{color:var(--ink)}
+  #tgModal{display:none; position:fixed; inset:0; z-index:1100; background:rgba(15,28,38,.6)}
+  #tgModal .box{background:var(--panel); width:860px; max-width:95vw; max-height:92vh; margin:3vh auto; border-radius:10px; padding:20px 24px; box-shadow:0 10px 40px rgba(0,0,0,.4); overflow-y:auto}
+  #tgModal .close{float:right; border:none; background:none; font-size:20px; cursor:pointer; color:var(--mut)}
+  #tgModal input, #tgModal select, #tgModal textarea{padding:5px 8px; border:1px solid var(--line); border-radius:5px; font-size:12.8px; font-family:inherit}
+  .tg-rec{border:1px solid var(--line); border-radius:8px; background:#fff; padding:10px 14px; margin:10px 0}
+  .tg-rec .tg-head{display:flex; gap:10px; flex-wrap:wrap; align-items:baseline; font-size:12.5px}
+  .tg-status{display:inline-block; font-size:11px; font-weight:700; padding:1px 10px; border-radius:10px}
+  .tg-выдано{background:#e3e8ec; color:#556}
+  .tg-вработе{background:#fbe8c8; color:#a86400}
+  .tg-устранено{background:#d8ecd9; color:var(--ok)}
+  .tg-просрочено{background:#f7dcd7; color:var(--crit)}
+  .tg-reply{border-left:3px solid var(--line); margin:6px 0 0 10px; padding:4px 10px; font-size:12.3px; background:#faf8f3}
 </style>
 </head>
 <body>
@@ -241,6 +256,13 @@
   <label>КРИТИЧНО: суммарная осадка ≥ <span><input id="sGTotal" type="number" step="5"> мм</span></label>
   <button class="save" id="sSave">Применить</button>
   <div class="note">Пороги — рабочие превентивные значения макета; при наличии проектной (расчётной) температуры основания здания введите её в карточке объекта.</div>
+</div>
+
+<div id="tgModal">
+  <div class="box">
+    <button class="close" id="tgClose">✕</button>
+    <div id="tgBody"></div>
+  </div>
 </div>
 
 <div id="repModal">
@@ -839,7 +861,7 @@ function renderDetail(o){
     ? `<div class="reasons">${sd.reasons.map(r=>`<div class="rsn r-${r.level}">${r.level==='crit'?'⛔':'⚠️'} ${esc(r.text)}</div>`).join('')}</div>`
     : (st?'<div class="reasons"><div class="rsn r-ok">✔ все показатели в пределах превентивных порогов</div></div>':'');
   d.innerHTML=`
-    <h2>${esc(o.a)}<span class="badge ${st?('b-'+{НОРМА:'ok',РИСК:'risk',КРИТИЧНО:'crit'}[st]):'b-card'}">${st||'карточка'}</span></h2>
+    <h2>${esc(o.a)}<span class="badge ${st?('b-'+{НОРМА:'ok',РИСК:'risk',КРИТИЧНО:'crit'}[st]):'b-card'}">${st||'карточка'}</span><button class="tglock" id="tgLock" title="Телефонограммы (доступ для УК и надзорной организации)">🔒</button></h2>
     <div class="rayon">Район: <b style="color:${DCOL[o.d]||'#666'}">${esc(o.d||'не определён')}</b> · УК: <b>${esc(effectiveUK(o))}</b> · г. Норильск</div>
     ${reasonsHtml}
     <div class="tabs" id="cardTabs"></div>
@@ -852,6 +874,7 @@ function renderDetail(o){
     b.onclick=()=>{curTab=k; renderDetail(o);};
     tb.appendChild(b);
   });
+  document.getElementById('tgLock').onclick=()=>openTg(o);
   renderTab(o);
 }
 function renderTab(o){
@@ -1817,7 +1840,155 @@ document.getElementById('sSave').onclick=()=>{
   drawMarkers(); renderStats(); renderList(); if(curObj) renderDetail(curObj);
 };
 
-/* ---------- парольный доступ (локальная версия; публичная — шифрование в загрузчике) ---------- */
+/* ---------- телефонограммы (скрытый раздел, свой доступ) ---------- */
+const TG_PWH='86551b783a42adbab63463e091b77083bc72cd51b9a77fb8a8e8c3d3c9b5d25a'; // пароль раздела
+let TG=JSON.parse(localStorage.getItem('ngk_tg_v1')||'{"users":[],"recs":{}}');
+function saveTG(){ try{ localStorage.setItem('ngk_tg_v1', JSON.stringify(TG)); }catch(e){ alert('Хранилище переполнено — данные не сохранены.'); } }
+function tgUser(){ return TG.users.find(u=>u.verified)||null; }
+function tgStatus(r){
+  if(r.done) return 'устранено';
+  if(r.replies&&r.replies.length) return 'в работе';
+  if(r.deadline && new Date(r.deadline)<new Date()) return 'просрочено';
+  return 'выдано';
+}
+function openTg(o){
+  const m=document.getElementById('tgModal'); m.style.display='block';
+  tgRender(o);
+}
+document.getElementById('tgClose').onclick=()=>document.getElementById('tgModal').style.display='none';
+document.getElementById('tgModal').addEventListener('click',e=>{ if(e.target===document.getElementById('tgModal')) document.getElementById('tgModal').style.display='none'; });
+
+async function tgRender(o){
+  const el=document.getElementById('tgBody');
+  // 1) пароль раздела
+  if(sessionStorage.getItem('ngk_tg_ok')!=='1'){
+    el.innerHTML=`
+      <h2 style="font-size:16px">🔒 Телефонограммы — ${esc(o.a)}</h2>
+      <div class="normref">Раздел предписаний и отчётов об устранении. Доступ: управляющая компания и организация мерзлотно-технического надзора.</div>
+      <div style="max-width:340px; margin:18px auto; text-align:center">
+        <input type="password" id="tgPw" placeholder="Пароль раздела" style="width:100%; margin-bottom:8px">
+        <button id="tgEnter" style="width:100%; padding:7px; background:var(--bg); color:#fff; border:none; border-radius:6px; cursor:pointer">Войти в раздел</button>
+        <div class="lerr" id="tgErr" style="color:var(--crit); font-size:12px; margin-top:6px"></div>
+      </div>`;
+    document.getElementById('tgEnter').onclick=async()=>{
+      const h=await sha256Hex(document.getElementById('tgPw').value);
+      if(h===TG_PWH){ sessionStorage.setItem('ngk_tg_ok','1'); tgRender(o); }
+      else document.getElementById('tgErr').textContent='Неверный пароль раздела';
+    };
+    return;
+  }
+  // 2) регистрация пользователя (email-верификация)
+  const u=tgUser();
+  if(!u){
+    const pend=TG.pending;
+    el.innerHTML=`
+      <h2 style="font-size:16px">Регистрация ответственного исполнителя</h2>
+      <div class="normref">Для фиксации ответственных за предписания и отчёты об устранении. Email подтверждается кодом верификации. <b>Макет:</b> код показывается на экране; в рабочей версии он уходит письмом.</div>
+      <div style="max-width:420px">
+        <div style="display:grid; gap:8px; margin:10px 0">
+          <input id="rgName" placeholder="ФИО ответственного">
+          <input id="rgOrg" placeholder="Организация (УК / надзорная)">
+          <select id="rgRole"><option value="">— роль —</option><option value="надзор">Организация мерзлотно-технического надзора (выдаёт предписания)</option><option value="ук">Управляющая компания (отчитывается об устранении)</option></select>
+          <input id="rgEmail" type="email" placeholder="Электронная почта">
+        </div>
+        <button id="rgSend" style="padding:7px 14px; background:var(--c-centr); color:#fff; border:none; border-radius:6px; cursor:pointer">Зарегистрировать и выслать код</button>
+        <div id="rgArea"></div>
+      </div>`;
+    document.getElementById('rgSend').onclick=()=>{
+      const name=document.getElementById('rgName').value.trim(), org=document.getElementById('rgOrg').value.trim(),
+            role=document.getElementById('rgRole').value, email=document.getElementById('rgEmail').value.trim();
+      if(!name||!org||!role||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ alert('Заполните ФИО, организацию, роль и корректный email.'); return; }
+      const code=String(Math.floor(100000+Math.random()*900000));
+      TG.pending={name,org,role,email,code};
+      saveTG();
+      document.getElementById('rgArea').innerHTML=`
+        <div style="margin-top:12px; padding:10px; background:#fff; border:1px dashed var(--c-centr); border-radius:6px">
+          [МАКЕТ] Код верификации для <b>${esc(email)}</b>: <b style="font-size:16px">${code}</b><br>
+          <span class="note">В рабочей версии код отправляется письмом на указанную почту.</span>
+          <div style="margin-top:8px; display:flex; gap:8px"><input id="rgCode" placeholder="Код из письма"><button id="rgVerify" style="padding:6px 12px; background:var(--bg); color:#fff; border:none; border-radius:6px; cursor:pointer">Подтвердить</button></div>
+        </div>`;
+      document.getElementById('rgVerify').onclick=()=>{
+        if(document.getElementById('rgCode').value.trim()===TG.pending.code){
+          TG.users.push({name:TG.pending.name, org:TG.pending.org, role:TG.pending.role, email:TG.pending.email, verified:true, ts:new Date().toISOString()});
+          delete TG.pending; saveTG(); tgRender(o);
+        } else alert('Код не совпадает.');
+      };
+    };
+    return;
+  }
+  // 3) реестр телефонограмм объекта
+  const recs=(TG.recs[o.a]=TG.recs[o.a]||[]);
+  const stats={выдано:0, 'в работе':0, устранено:0, просрочено:0};
+  recs.forEach(r=>stats[tgStatus(r)]++);
+  el.innerHTML=`
+    <h2 style="font-size:16px">Телефонограммы — ${esc(o.a)}</h2>
+    <div class="normref">Исполнитель: <b>${esc(u.name)}</b> · ${esc(u.org)} · ${u.role==='надзор'?'надзорная организация':'УК'} · ${esc(u.email)} ✔ · <a href="#" id="tgReauth" style="color:var(--c-centr)">сменить пользователя</a></div>
+    <div style="display:flex; gap:14px; font-size:12.5px; margin:6px 0">
+      <span>выдано: <b>${stats['выдано']}</b></span><span>в работе: <b>${stats['в работе']}</b></span>
+      <span>устранено: <b style="color:var(--ok)">${stats['устранено']}</b></span><span>просрочено: <b style="color:var(--crit)">${stats['просрочено']}</b></span>
+    </div>
+    ${u.role==='надзор'?`<button class="addrow" id="tgNew" style="border-style:solid">+ Новая телефонограмма (предписание)</button><div id="tgNewArea"></div>`:'<div class="note">Новые предписания выдаёт надзорная организация; УК отчитывается в записях ниже.</div>'}
+    <div id="tgList"></div>`;
+  document.getElementById('tgReauth').onclick=e=>{ e.preventDefault(); TG.users=[]; saveTG(); tgRender(o); };
+  if(u.role==='надзор') document.getElementById('tgNew').onclick=()=>{
+    document.getElementById('tgNewArea').innerHTML=`
+      <div style="border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:#fff; margin:8px 0; display:grid; gap:7px">
+        <textarea id="tgViol" rows="2" placeholder="Выявленное нарушение (что, где, когда обнаружено)"></textarea>
+        <textarea id="tgReq" rows="2" placeholder="Требование / предписание (что устранить и как)"></textarea>
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <label style="font-size:12px">Дата запроса <input type="date" id="tgDate" value="${new Date().toISOString().slice(0,10)}"></label>
+          <label style="font-size:12px">Срок устранения <input type="date" id="tgDeadline"></label>
+          <label style="font-size:12px">Ответственная УК <select id="tgUk">${UK_LIST.map(x=>'<option>'+esc(x)+'</option>').join('')}</select></label>
+        </div>
+        <button id="tgSave" style="padding:6px 14px; background:var(--c-centr); color:#fff; border:none; border-radius:6px; cursor:pointer">Зарегистрировать предписание</button>
+      </div>`;
+    document.getElementById('tgSave').onclick=()=>{
+      const v=document.getElementById('tgViol').value.trim(), q=document.getElementById('tgReq').value.trim();
+      if(!v||!q){ alert('Заполните нарушение и требование.'); return; }
+      recs.push({id:Date.now(), date:document.getElementById('tgDate').value, violation:v, requirement:q,
+                 deadline:document.getElementById('tgDeadline').value, uk:document.getElementById('tgUk').value,
+                 by:u.name, byOrg:u.org, done:false, replies:[]});
+      saveTG(); tgRender(o);
+    };
+  }
+  const list=document.getElementById('tgList');
+  list.innerHTML='';
+  recs.slice().reverse().forEach(r=>{
+    const st=tgStatus(r);
+    const div=document.createElement('div');
+    div.className='tg-rec';
+    div.innerHTML=`
+      <div class="tg-head"><b>Предписание №${String(r.id).slice(-6)}</b><span class="note">от ${esc(r.date||'')}</span>
+        <span class="tg-status tg-${st.replace(' ','')}">${st.toUpperCase()}</span>
+        <span class="note">ответств.: ${esc(r.uk||'—')} · срок: ${esc(r.deadline||'—')}</span></div>
+      <div style="font-size:12.5px; margin-top:5px"><b>Нарушение:</b> ${esc(r.violation)}</div>
+      <div style="font-size:12.5px"><b>Требование:</b> ${esc(r.requirement)}</div>
+      <div class="note">выдал: ${esc(r.by)} (${esc(r.byOrg)})</div>
+      <div class="tg-replies"></div>
+      ${u.role==='ук'&&!r.done?`<div style="margin-top:6px; display:flex; gap:6px"><input placeholder="Отчёт об устранении / ход работ" style="flex:1" class="tg-rep-inp"><button class="wbtn tg-rep-btn">Отправить отчёт</button><button class="wbtn tg-done-btn">Отметить устранённым</button></div>`:''}`;
+    const rl=div.querySelector('.tg-replies');
+    (r.replies||[]).forEach(rp=>{
+      const d=document.createElement('div');
+      d.className='tg-reply';
+      d.innerHTML=`<b>${esc(rp.by)}</b> (${esc(rp.byOrg)}), ${esc(rp.date)}: ${esc(rp.text)}`;
+      rl.appendChild(d);
+    });
+    if(u.role==='ук'&&!r.done){
+      div.querySelector('.tg-rep-btn').onclick=()=>{
+        const t=div.querySelector('.tg-rep-inp').value.trim();
+        if(!t){ alert('Введите текст отчёта.'); return; }
+        r.replies=r.replies||[]; r.replies.push({by:u.name, byOrg:u.org, date:new Date().toISOString().slice(0,10), text:t});
+        saveTG(); tgRender(o);
+      };
+      div.querySelector('.tg-done-btn').onclick=()=>{
+        if(!confirm('Отметить предписание устранённым?')) return;
+        r.done=true; r.doneDate=new Date().toISOString().slice(0,10); r.doneBy=u.name+' ('+u.org+')';
+        saveTG(); tgRender(o);
+      };
+    }
+    list.appendChild(div);
+  });
+}
 const PWH={view:'e25263815248915f93d27213a93195cf2b11e94e51171099fb6a5c6954cc040a',
            edit:'2fc5b5a616cdbc8e4081158340a5d424d05a2be0a4df7aa968c04868103f89cc'};
 async function sha256Hex(s){ const b=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
