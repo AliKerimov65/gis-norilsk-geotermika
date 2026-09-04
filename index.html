@@ -6,6 +6,7 @@
 <title>ГИС-база геотермического мониторинга зданий. г. Норильск · АНО «АНИИГБ» им. М.В. Кима</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg:#0f1c26; --panel:#f5f2ec; --ink:#1d2733; --mut:#6b7684;
@@ -74,6 +75,43 @@
   #settings label{display:flex; justify-content:space-between; align-items:center; margin:6px 0; gap:8px}
   #settings input{width:70px; padding:3px 6px; border:1px solid var(--line); border-radius:4px; text-align:right}
   #settings .save{margin-top:10px; width:100%; padding:6px; background:var(--bg); color:#fff; border:none; border-radius:6px; cursor:pointer}
+
+  /* ---------- вкладки карточки объекта ---------- */
+  .tabs{display:flex; flex-wrap:wrap; gap:0; border-bottom:2px solid var(--line); margin:8px 0 12px}
+  .tabs button{border:none; background:none; padding:6px 9px; font-size:11.8px; cursor:pointer; color:var(--mut); border-bottom:2px solid transparent; margin-bottom:-2px; font-family:inherit}
+  .tabs button.on{color:var(--ink); font-weight:600; border-bottom-color:var(--c-centr)}
+  .tabs button:hover{color:var(--ink)}
+  table.kv input.ed, table.kv select.ed, table.kv textarea.ed{width:100%; padding:2px 6px; border:1px solid transparent; border-radius:4px; font-size:12.8px; background:transparent; font-family:inherit}
+  table.kv input.ed:hover, table.kv select.ed:hover, table.kv textarea.ed:hover{border-color:var(--line); background:#fff}
+  table.kv input.ed:focus, table.kv select.ed:focus, table.kv textarea.ed:focus{border-color:var(--c-centr); background:#fff; outline:none}
+  table.rows{width:100%; border-collapse:collapse; font-size:12.3px; margin-bottom:8px}
+  table.rows th{background:#ece7dd; padding:4px 6px; text-align:left; font-weight:600; border:1px solid #ddd5c6; font-size:11.3px}
+  table.rows td{padding:3px 4px; border:1px solid #e7e1d6; vertical-align:top}
+  table.rows input, table.rows select{width:100%; border:1px solid transparent; background:transparent; padding:2px 4px; font-size:12.3px; font-family:inherit}
+  table.rows input:focus, table.rows select:focus{border-color:var(--c-centr); background:#fff; outline:none}
+  .addrow{border:1px dashed #b9ae9c; background:none; border-radius:4px; padding:4px 10px; font-size:12px; cursor:pointer; color:var(--mut); width:100%; margin-bottom:10px}
+  .addrow:hover{color:var(--ink); border-color:var(--c-centr)}
+  .delrow{border:none; background:none; color:var(--crit); cursor:pointer; font-size:13px; padding:0 4px}
+  .normref{font-size:11px; color:#8a94a0; margin:0 0 10px; font-style:normal}
+  .photos{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px}
+  .photos figure{border:1px solid var(--line); border-radius:4px; overflow:hidden; background:#fff}
+  .photos img{width:100%; height:90px; object-fit:cover; display:block; cursor:pointer}
+  .photos figcaption{font-size:10.5px; padding:3px 6px; color:var(--mut); display:flex; justify-content:space-between; align-items:center}
+  .ukgroup{position:sticky; top:0; background:#e4ded2; padding:5px 14px; font-size:11.5px; font-weight:700; letter-spacing:.4px; color:#5a5346; border-bottom:1px solid var(--line); z-index:5}
+  .ukgroup .n{font-weight:400; color:var(--mut); margin-left:6px}
+  /* ---------- загрузка данных ---------- */
+  #uploadBtn{background:#2e7d32; border:1px solid #2e7d32; color:#fff; border-radius:6px; padding:4px 12px; cursor:pointer; font-size:13px}
+  #uploadBtn:hover{background:#256a29}
+  #uplModal{display:none; position:fixed; inset:0; z-index:1000; background:rgba(15,28,38,.55)}
+  #uplModal .box{background:var(--panel); width:720px; max-width:94vw; max-height:88vh; overflow-y:auto; margin:5vh auto; border-radius:10px; padding:22px 26px; box-shadow:0 10px 40px rgba(0,0,0,.35)}
+  #uplModal h2{font-size:16px; margin-bottom:4px}
+  #uplModal .close{float:right; border:none; background:none; font-size:20px; cursor:pointer; color:var(--mut)}
+  #uplModal .cols{font-size:12px; background:#fff; border:1px solid var(--line); border-radius:6px; padding:10px 12px; margin:8px 0}
+  #uplModal .cols b{font-size:11.5px}
+  #uplModal .acts{display:flex; gap:10px; flex-wrap:wrap; margin:12px 0}
+  #uplModal .acts button, #uplModal .acts a.btn{border:1px solid var(--c-centr); background:var(--c-centr); color:#fff; border-radius:6px; padding:6px 14px; font-size:12.5px; cursor:pointer; text-decoration:none}
+  #uplModal .acts button.ghost, #uplModal .acts a.ghost{background:#fff; color:var(--c-centr)}
+  #uplLog{font-size:12px; max-height:180px; overflow-y:auto; background:#fff; border:1px solid var(--line); border-radius:6px; padding:8px 10px; margin-top:8px; display:none; white-space:pre-wrap}
   @media (max-width:1100px){ #app{grid-template-columns:270px 1fr 360px} }
 </style>
 </head>
@@ -85,10 +123,13 @@
       <div class="sub">АНО «АНИИГБ» им. М.В. Кима</div>
     </div>
     <div class="stats" id="hstats"></div>
+    <button id="uploadBtn" title="Загрузка данных по шаблону">⬆ Загрузка данных</button>
     <button id="gear" title="Пороги статусов">⚙ Пороги</button>
   </header>
   <div id="side">
     <div class="chips" id="chips"></div>
+    <select id="ukFilter" style="margin:0 12px 6px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; width:calc(100% - 24px)"></select>
+    <label style="margin:0 12px 8px; font-size:11.8px; color:var(--mut); display:flex; gap:6px; align-items:center; cursor:pointer"><input type="checkbox" id="ukGroup"> группировать список по УК</label>
     <input id="search" placeholder="Поиск по адресу…">
     <div id="list"></div>
   </div>
@@ -115,14 +156,40 @@
   <div class="note">Пороги — рабочие превентивные значения макета; при наличии проектной (расчётной) температуры основания здания введите её в карточке объекта.</div>
 </div>
 
-<script src="db_p1.js?v=bc9bc15b"></script>
-<script src="db_p2.js?v=bc9bc15b"></script>
-<script src="db_p3.js?v=bc9bc15b"></script>
-<script src="db_p4.js?v=bc9bc15b"></script>
-<script src="db_p5.js?v=bc9bc15b"></script>
-<script src="db_p6.js?v=bc9bc15b"></script>
-<script src="db_p7.js?v=bc9bc15b"></script>
-<script src="db_p8.js?v=bc9bc15b"></script>
+<div id="uplModal">
+  <div class="box">
+    <button class="close" id="uplClose">✕</button>
+    <h2>Загрузка данных геотермического мониторинга</h2>
+    <div class="normref">Структура ведомости замеров — по ГОСТ 25358-2020 (прил. В, Д); оформление журнала мерзлотного надзора — по СП 25.13330.2020 и ВСН 01-89.</div>
+    <div class="cols">
+      <b>Шаблон ведомости (одна строка = одна точка замера):</b><br>
+      <code>Адрес объекта</code> · <code>Район</code> · <code>Скважина (литера)</code> · <code>Дата замера (ДД.ММ.ГГГГ)</code> ·
+      <code>Глубина скважины, м</code> · <code>Глубина точки, м</code> · <code>Температура, °C</code> · <code>Источник (журнал, файл)</code><br>
+      <span style="color:var(--mut)">Температура — со знаком «минус» для отрицательных значений; разделитель десятичных — точка или запятая.
+      Адрес должен совпадать с адресом в базе (допустимы варианты написания). Новые адреса будут отклонены — сначала создайте карточку объекта.</span>
+    </div>
+    <div class="acts">
+      <a class="btn" href="Шаблон_загрузки_замеров.xlsx" download>⬇ Шаблон XLSX</a>
+      <button class="ghost" id="uplCsvTpl">⬇ Шаблон CSV</button>
+      <button id="uplPick">Выбрать файл (xlsx / csv)…</button>
+      <input type="file" id="uplFile" accept=".xlsx,.xls,.csv" style="display:none">
+      <button class="ghost" id="uplExport">Экспорт моих загрузок (JSON)</button>
+      <button class="ghost" id="uplClear" style="border-color:var(--crit); color:var(--crit)">Очистить мои загрузки</button>
+    </div>
+    <div id="uplLog"></div>
+    <div class="note">Загруженные замеры сохраняются в браузере (localStorage) и сразу участвуют в графиках и статусах.
+    Для включения в центральную базу передайте файл в АНО «АНИИГБ» им. М.В. Кима.</div>
+  </div>
+</div>
+
+<script src="db_p1.js?v=8378922f"></script>
+<script src="db_p2.js?v=8378922f"></script>
+<script src="db_p3.js?v=8378922f"></script>
+<script src="db_p4.js?v=8378922f"></script>
+<script src="db_p5.js?v=8378922f"></script>
+<script src="db_p6.js?v=8378922f"></script>
+<script src="db_p7.js?v=8378922f"></script>
+<script src="db_p8.js?v=8378922f"></script>
 <script>window.__initApp=function(){
 const DCOL = {"Центральный":"#2f6fb2","Талнах":"#c05a2e","Кайеркан":"#3d8a5a"};
 const SCOL = {"НОРМА":"#2e7d32","РИСК":"#e08a00","КРИТИЧНО":"#c8372d"};
@@ -136,6 +203,36 @@ function saveTH(){ localStorage.setItem('ngk_th', JSON.stringify(TH)); }
 /* ---------- расчётные температуры (ввод пользователя, по адресу) ---------- */
 let TCALC = JSON.parse(localStorage.getItem('ngk_tcalc')||'{}');
 function saveTCALC(){ localStorage.setItem('ngk_tcalc', JSON.stringify(TCALC)); }
+
+/* ---------- карточные данные объекта (ввод пользователя, по адресу) ---------- */
+let CARD = JSON.parse(localStorage.getItem('ngk_card_v1')||'{}');
+function saveCARD(){ try{ localStorage.setItem('ngk_card_v1', JSON.stringify(CARD)); }catch(e){ alert('Хранилище браузера переполнено (фото/файлы слишком большие) — данные не сохранены.'); } }
+function cardOf(a){ return CARD[a]||(CARD[a]={}); }
+
+/* ---------- пользовательские замеры (загрузка по шаблону) ---------- */
+let USERDATA = JSON.parse(localStorage.getItem('ngk_userdata')||'[]');  // [{a,w,date,dep,pts:[[d,t]..],src}]
+function saveUSERDATA(){ localStorage.setItem('ngk_userdata', JSON.stringify(USERDATA)); }
+
+/* ---------- управляющие компании ---------- */
+const UK_LIST = ['УК «ЖКС-Норильск»','УК «Город»','ООО «Нордсервис»','ООО «СеверныйБыт»','ООО «СеверныйУправдом»','ООО «Заполярный жилищный трест»','ООО «Будущее»'];
+function effectiveUK(o){ const c=CARD[o.a]; return (c&&c.uk!==undefined&&c.uk!=='')?c.uk:(o.uk||'Не определена'); }
+function normAddrKey(s){
+  s=(s||'').toLowerCase().replace(/ё/g,'е');
+  s=s.replace(/\([^)]*\)/g,' ');
+  s=s.replace(/\b(ул\.?|улица|пр\.?|проспект|пр-т|проезд|пер\.?|переулок|наб\.?|мкр\.?)\b/g,' ');
+  s=s.replace(/^(оганер|снежногорск)\s+/,' ');
+  s=s.replace(/[.,;]/g,' '); s=s.split(/\s+/).filter(Boolean).join(' ');
+  s=s.replace(/б[.\s]?хмельницкого/,'богдана хмельницкого');
+  const m=s.match(/^(.*?)\s*(\d+[\dа-яa-z\/\-]*)$/i);
+  if(!m) return s;
+  let h=m[2].toLowerCase().replace(/\s/g,'').replace(/_/g,'-');
+  const mm=h.match(/^(\d+)([а-я]{2,}.*)$/); if(mm) h=mm[1];
+  return m[1].trim()+' '+h;
+}
+
+/* применяем ранее загруженные пользователем замеры до первой отрисовки */
+let addrIndex=null;
+try{ applyUserData(); }catch(e){ console.error('applyUserData:', e); }
 
 /* ---------- аналитика ---------- */
 function interp(pts, d){ // линейная интерполяция профиля [[d,t]...] на глубину d
@@ -196,7 +293,7 @@ for(const [name, rings] of Object.entries(DB.districts)){
   L.polygon(rings.map(r=>r.map(p=>[p[0],p[1]])),{color:DCOL[name],weight:2.5,fillColor:DCOL[name],fillOpacity:.06,dashArray:'6 4'}).addTo(map);
   L.marker(labelPos[name],{interactive:false,icon:L.divIcon({className:'district-label',html:name.toUpperCase(),iconSize:null})}).addTo(map);
 }
-let curD='Все', curQ='';
+let curD='Все', curQ='', curUK='Все', groupUK=false;
 const markers = {};
 function markerColor(o){ const st=statusOf(o); return st?SCOL[st]:'#8a97a3'; }
 function drawMarkers(){
@@ -239,11 +336,34 @@ districts.forEach(d=>{
   chipsEl.appendChild(el);
 });
 document.getElementById('search').addEventListener('input',e=>{curQ=e.target.value.toLowerCase();renderList();});
-function passF(o){ return (curD==='Все'||o.d===curD)&&(!curQ||o.a.toLowerCase().includes(curQ)); }
+/* --- фильтр и группировка по УК --- */
+const ukSel=document.getElementById('ukFilter');
+{
+  const opts=['Все'].concat(UK_LIST, ['Не определена']);
+  ukSel.innerHTML=opts.map(u=>{
+    const n=u==='Все'?DB.objects.length:DB.objects.filter(o=>effectiveUK(o)===u).length;
+    return `<option value="${u}">УК: ${u} (${n})</option>`;
+  }).join('');
+  ukSel.onchange=()=>{curUK=ukSel.value; renderList();};
+  document.getElementById('ukGroup').onchange=e=>{groupUK=e.target.checked; renderList();};
+}
+function passF(o){ return (curD==='Все'||o.d===curD)&&(curUK==='Все'||effectiveUK(o)===curUK)&&(!curQ||o.a.toLowerCase().includes(curQ)); }
 function renderList(){
   const list=document.getElementById('list'); list.innerHTML='';
-  DB.objects.forEach((o,i)=>{
-    if(!passF(o)) return;
+  let idx=DB.objects.map((o,i)=>[o,i]).filter(([o])=>passF(o));
+  if(groupUK) idx.sort((a,b)=>{ const ua=effectiveUK(a[0]), ub=effectiveUK(b[0]); return ua===ub? a[0].a.localeCompare(b[0].a,'ru') : ua.localeCompare(ub,'ru'); });
+  let lastGroup=null;
+  idx.forEach(([o,i])=>{
+    if(groupUK){
+      const g=effectiveUK(o);
+      if(g!==lastGroup){
+        lastGroup=g;
+        const n=DB.objects.filter(x=>passF(x)&&effectiveUK(x)===g).length;
+        const gh=document.createElement('div');
+        gh.className='ukgroup'; gh.innerHTML=g+`<span class="n">${n} об.</span>`;
+        list.appendChild(gh);
+      }
+    }
     const st=statusOf(o);
     const el=document.createElement('div');
     el.className='item'; el.id='it'+i;
@@ -509,7 +629,10 @@ function drawIsopleth(cv, o, wliter){
 
 /* ---------- карточка объекта ---------- */
 function fmt(v,u){return (v===null||v===undefined)?'—':v+(u||'')}
-let curObj=null, curWell=null, curDepths=new Set();
+function esc(s){return String(s===null||s===undefined?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+let curObj=null, curWell=null, curDepths=new Set(), curTab='passport';
+const TABS=[['passport','Паспорт объекта'],['project','Проектная документация'],['igi','Инженерно-геология'],['geoterm','Геотермика'],['geod','Геодезия'],['expl','Условия эксплуатации'],['photo','Фотоматериалы'],['misc','Иное']];
+
 function select(i,fromList){
   const o=DB.objects[i]; curObj=o;
   document.querySelectorAll('.item').forEach(e=>e.classList.remove('sel'));
@@ -522,51 +645,167 @@ function select(i,fromList){
   }
   renderDetail(o);
 }
+
 function renderDetail(o){
   const d=document.getElementById('detail');
   const st=statusOf(o);
+  d.innerHTML=`
+    <h2>${esc(o.a)}<span class="badge ${st?('b-'+{НОРМА:'ok',РИСК:'risk',КРИТИЧНО:'crit'}[st]):'b-card'}">${st||'карточка'}</span></h2>
+    <div class="rayon">Район: <b style="color:${DCOL[o.d]||'#666'}">${esc(o.d||'не определён')}</b> · УК: <b>${esc(effectiveUK(o))}</b> · г. Норильск</div>
+    <div class="tabs" id="cardTabs"></div>
+    <div id="tabBody"></div>`;
+  const tb=document.getElementById('cardTabs');
+  TABS.forEach(([k,label])=>{
+    const b=document.createElement('button');
+    if(k===curTab) b.className='on';
+    b.textContent=label;
+    b.onclick=()=>{curTab=k; renderDetail(o);};
+    tb.appendChild(b);
+  });
+  renderTab(o);
+}
+function renderTab(o){
+  const el=document.getElementById('tabBody');
+  ({passport:tabPassport, project:tabProject, igi:tabIGI, geoterm:tabGeoterm,
+    geod:tabGeod, expl:tabExpl, photo:tabPhoto, misc:tabMisc})[curTab](o, el);
+}
+
+/* --- редактируемые поля карточки: <input|select|textarea class="ed" data-scope data-k> --- */
+function edVal(o, scope, k, dflt){
+  const c=CARD[o.a]; const v=c&&c[scope]&&c[scope][k];
+  return v!==undefined?v:(dflt===undefined?'':dflt);
+}
+function inp(o, scope, k, dflt, type){
+  return `<input class="ed" data-scope="${scope}" data-k="${k}" type="${type||'text'}" value="${esc(edVal(o,scope,k,dflt))}">`;
+}
+function sel(o, scope, k, dflt, options){
+  const v=edVal(o,scope,k,dflt);
+  return `<select class="ed" data-scope="${scope}" data-k="${k}">`+options.map(x=>`<option ${String(x)===String(v)?'selected':''}>${esc(x)}</option>`).join('')+'</select>';
+}
+function wireEd(o, el, scope){
+  el.querySelectorAll('.ed').forEach(inpEl=>{
+    inpEl.addEventListener('change', ()=>{
+      const c=cardOf(o.a); c[scope]=c[scope]||{};
+      const v=inpEl.value.trim();
+      if(v==='') delete c[scope][inpEl.dataset.k]; else c[scope][inpEl.dataset.k]=v;
+      saveCARD();
+      if(scope==='pf'&&inpEl.dataset.k==='uk'){ renderList(); renderDetail(o); }
+    });
+  });
+}
+/* --- таблицы с добавлением строк (реестры документов, ИГИ, геодезия) --- */
+function renderRows(o, el, scope, keys, selects){
+  const c=cardOf(o.a); c[scope]=c[scope]||[];
+  const tb=el.querySelector('tbody');
+  function paint(){
+    tb.innerHTML='';
+    c[scope].forEach((row,i)=>{
+      const tr=document.createElement('tr');
+      keys.forEach(k=>{
+        const td=document.createElement('td');
+        if(selects&&selects[k]){
+          td.innerHTML='<select data-i="'+i+'" data-k="'+k+'">'+selects[k].map(x=>'<option '+(String(row[k]||'')===String(x)?'selected':'')+'>'+esc(x)+'</option>').join('')+'</select>';
+        } else {
+          td.innerHTML='<input data-i="'+i+'" data-k="'+k+'" value="'+esc(row[k]||'')+'">';
+        }
+        tr.appendChild(td);
+      });
+      const td=document.createElement('td');
+      const del=document.createElement('button');
+      del.className='delrow'; del.title='Удалить строку'; del.textContent='✕';
+      del.onclick=()=>{ c[scope].splice(i,1); saveCARD(); paint(); };
+      td.appendChild(del); tr.appendChild(td);
+      tb.appendChild(tr);
+    });
+    tb.querySelectorAll('input,select').forEach(inpEl=>{
+      inpEl.addEventListener('change',()=>{ c[scope][+inpEl.dataset.i][inpEl.dataset.k]=inpEl.value.trim(); saveCARD(); });
+    });
+  }
+  paint();
+  el.querySelector('.addrow').onclick=()=>{ c[scope].push({}); saveCARD(); paint(); };
+}
+
+function tabPassport(o, el){
+  const wells=o.prof?Object.keys(o.prof):[];
   const prec={'точный':'точный адрес (OSM)','по улице':'центроид улицы','nominatim':'Nominatim/OSM'}[o.p]||'—';
+  el.innerHTML=`
+  <div class="normref">Состав сведений: ГОСТ 31937-2024 «Здания и сооружения. Правила обследования и мониторинга технического состояния» (паспорт объекта мониторинга); СП 25.13330.2020 (разд. 5 — принципы использования вечномерзлых грунтов); ПП РФ № 491 (п. 24–26, состав технической документации на МКД). Поля редактируются и сохраняются локально в браузере.</div>
+  <table class="kv">
+    <tr><td>Адрес</td><td>г. Норильск, ${esc(o.a)}</td></tr>
+    <tr><td>Район</td><td>${esc(o.d||'—')}</td></tr>
+    <tr><td>Управляющая компания</td><td>${sel(o,'pf','uk', o.uk||'Не определена', UK_LIST.concat(['Не определена']))}</td></tr>
+    <tr><td>Координаты (WGS-84)</td><td>${fmt(o.lat)}, ${fmt(o.lon)} <span style="color:var(--mut)">(${prec})</span></td></tr>
+    <tr><td>Год постройки</td><td>${inp(o,'pf','year', o.y??'')}</td></tr>
+    <tr><td>Серия / тип проекта</td><td>${inp(o,'pf','series', o.s??'')}</td></tr>
+    <tr><td>Этажность</td><td>${inp(o,'pf','floors','')}</td></tr>
+    <tr><td>Конструктивная схема</td><td>${inp(o,'pf','konstr','')}</td></tr>
+    <tr><td>Тип фундамента</td><td>${sel(o,'pf','fund','', ['','свайный, без ростверка','свайный с ростверком','ленточный','плитный','столбчатый','иной'])}</td></tr>
+    <tr><td>Принцип использования ММГ (СП 25.13330, п. 5.4)</td><td>${sel(o,'pf','princip','', ['','I — с сохранением мёрзлого состояния','II — с допущением оттаивания','IIа — с предварительным оттаиванием','иной'])}</td></tr>
+    <tr><td>Расчётная температура основания T<sub>расч</sub></td><td><input class="ed" data-scope="pf" data-k="tcalc" id="tcalcInp" type="number" step="0.1" style="width:90px" value="${edVal(o,'pf','tcalc', TCALC[o.a]!==undefined?TCALC[o.a]:'')}"> °C</td></tr>
+    <tr><td>Термометрических скважин</td><td>${wells.length||fmt(o.nw,' шт.')}${wells.length?' ('+wells.map(esc).join(', ')+')':''}</td></tr>
+    <tr><td>Период наблюдений</td><td>${o.d0||'—'} … ${o.d1||'—'}</td></tr>
+    <tr><td>Организация, ведущая мерзлотный надзор</td><td>${inp(o,'pf','nadzor','')}</td></tr>
+    <tr><td>Дата последнего обследования</td><td>${inp(o,'pf','obsled','','date')}</td></tr>
+  </table>
+  <div class="sect">Источники данных</div>
+  <div class="srcs">${o.src.map(esc).join('<br>')}</div>`;
+  wireEd(o, el, 'pf');
+  const tcInp=el.querySelector('#tcalcInp');
+  tcInp.addEventListener('change', ()=>{
+    const v=parseFloat(tcInp.value);
+    if(isNaN(v)) delete TCALC[o.a]; else TCALC[o.a]=v;
+    saveTCALC(); drawMarkers(); renderStats();
+  });
+}
+
+function tabProject(o, el){
+  el.innerHTML=`
+  <div class="normref">Реестр проектной и исполнительной документации: состав разделов — ПП РФ № 87; шифры документов — ГОСТ 21.1101-2013 (СПДС); перечень техдокументации МКД — ПП РФ № 491 (п. 24–26).</div>
+  <table class="rows"><thead><tr>
+    <th style="width:32%">Наименование документа</th><th style="width:14%">Шифр</th><th style="width:18%">Разработчик</th><th style="width:8%">Год</th><th style="width:8%">Стадия</th><th>Примечание</th><th></th>
+  </tr></thead><tbody></tbody></table>
+  <button class="addrow">+ добавить документ</button>`;
+  renderRows(o, el, 'docs', ['name','shifr','org','year','stage','note'], {stage:['','П','Р','РД','ИД','ЭД']});
+}
+
+function tabIGI(o, el){
+  el.innerHTML=`
+  <div class="normref">СП 47.13330.2016 «Инженерные изыскания для строительства»; СП 11-105-97 (ч. II — мерзлотные грунты); классификация грунтов — ГОСТ 25100-2020; отчёт ИГИ — по схеме СП 47.13330 (прил. В).</div>
+  <table class="rows"><thead><tr>
+    <th style="width:22%">Отчёт ИГИ / инв. №</th><th style="width:8%">Год</th><th style="width:18%">Организация</th><th style="width:13%">Скважины ИГИ</th><th style="width:19%">Грунты (ИГЭ)</th><th style="width:8%">УГВ, м</th><th>Примечание</th><th></th>
+  </tr></thead><tbody></tbody></table>
+  <button class="addrow">+ добавить отчёт ИГИ</button>`;
+  renderRows(o, el, 'igi', ['report','year','org','wells','grunt','ugv','note']);
+}
+
+function tabGeoterm(o, el){
+  const st=statusOf(o);
   const wells=o.prof?Object.keys(o.prof):[];
   if(!curWell||!wells.includes(curWell)) curWell=wells[0]||null;
-  // доступные глубины объекта
-  const depthsAvail=o.amp?Object.keys(o.amp).map(Number):[];
+  const depthsAvail=o.prof?[...new Set(Object.values(o.prof).flatMap(wd=>wd.s.flatMap(x=>x[1].map(p=>p[0]))))].sort((a,b)=>a-b):[];
   if(!curDepths.size) depthsAvail.filter(x=>[3,5,7,10,12,15].includes(x)).slice(0,4).forEach(x=>curDepths.add(x));
   const tc=TCALC[o.a];
-  d.innerHTML=`
-    <h2>${o.a}<span class="badge ${st?('b-'+{НОРМА:'ok',РИСК:'risk',КРИТИЧНО:'crit'}[st]):'b-card'}">${st||'карточка'}</span></h2>
-    <div class="rayon">Район: <b style="color:${DCOL[o.d]||'#666'}">${o.d||'не определён'}</b> · г. Норильск</div>
-    <div class="sect">Общие сведения</div>
-    <table class="kv">
-      <tr><td>Координаты</td><td>${fmt(o.lat)}, ${fmt(o.lon)} <span style="color:var(--mut)">(${prec})</span></td></tr>
-      <tr><td>Год постройки</td><td>${fmt(o.y)}</td></tr>
-      <tr><td>Серия / тип</td><td>${fmt(o.s)}</td></tr>
-      <tr><td>Термометрических скважин</td><td>${wells.length||fmt(o.nw,' шт.')}</td></tr>
-      ${wells.length?`<tr><td>Литеры скважин</td><td>${wells.join(', ')}</td></tr>`:''}
-      <tr><td>Период наблюдений</td><td>${o.d0||'—'} … ${o.d1||'—'}</td></tr>
-    </table>
-    ${o.prof?`
+  el.innerHTML = o.prof? `
+    <div class="normref">ГОСТ 25358-2020 «Грунты. Методы полевых измерений температуры»: график распределения температуры по глубине (прил. Д, рис. Д.1); график термоизоплет (прил. Д, рис. Д.2); глубина НГК — СП 25.13330.2020 (п. 3.1).</div>
     <div class="sect">Тепловое состояние основания</div>
     <table class="kv">
       <tr><td>Глубина нулевых годовых колебаний (НГК)</td><td>${o.ngc?fmt(o.ngc.h,' м'):'—'}</td></tr>
       <tr><td>T грунта на уровне НГК (средняя)</td><td>${o.ngc?fmt(o.ngc.t,' °C'):'—'}</td></tr>
-      <tr><td>Расчётная (проектная) температура</td><td><input class="tcalc" id="tcalcInp" type="number" step="0.1" value="${tc!==undefined?tc:''}" placeholder="—"> °C</td></tr>
+      <tr><td>Расчётная (проектная) температура</td><td>${tc!==undefined?('<b>'+tc+' °C</b>'):'—'} <span class="note">(задаётся во вкладке «Паспорт объекта»)</span></td></tr>
       <tr><td>Статус (превентивный)</td><td><b style="color:${SCOL[st]}">${st}</b></td></tr>
     </table>
-    <div class="note">Глубина НГК — по амплитуде годовых колебаний ≤ 0,1 °C в рядах замеров (оценка макета). Расчётная температура вводится из проектной документации и сохраняется локально.</div>
+    <div class="note">Глубина НГК — по амплитуде годовых колебаний ≤ 0,1 °C в рядах замеров (оценка макета).</div>
     <div class="sect">График распределения температуры по глубине · ГОСТ 25358-2020, прил. Д</div>
     <div class="wells" id="wellBtns"></div>
     <canvas class="plot" id="gostChart"></canvas>
     <div class="sect">График термоизоплет по скважине · ГОСТ 25358-2020, прил. Д, рис. Д.2</div>
     <canvas class="plot" id="isoChart"></canvas>
     <div class="sect">Тренд температур по глубинам</div>
-    <div class="note" style="margin:0 0 2px">Скважина: <b id="trWell">${curWell}</b> (та же, что на профиле). Глубины:</div>
+    <div class="note" style="margin:0 0 2px">Скважина: <b id="trWell">${esc(curWell)}</b> (та же, что на профиле). Глубины:</div>
     <div class="depths" id="depthBtns"></div>
-    <canvas class="plot" id="trendChart"></canvas>
-    `:'<div class="empty" style="text-align:left;padding:8px 0">Числовые замеры по объекту в файлах не найдены —<br>запись зарезервирована в структуре БД.</div>'}
-    <div class="sect">Источники данных</div>
-    <div class="srcs">${o.src.join('<br>')}</div>`;
+    <canvas class="plot" id="trendChart"></canvas>`
+  : '<div class="empty" style="text-align:left;padding:8px 0">Числовые замеры по объекту в файлах не найдены — запись зарезервирована в структуре БД.<br>Замеры можно добавить через «⬆ Загрузка данных» в шапке.</div>';
   if(o.prof){
-    // кнопки скважин
     const wb=document.getElementById('wellBtns');
     wells.forEach(w=>{
       const b=document.createElement('button');
@@ -574,7 +813,6 @@ function renderDetail(o){
       b.onclick=()=>{curWell=w; renderDetail(o);};
       wb.appendChild(b);
     });
-    // кнопки глубин
     const db=document.getElementById('depthBtns');
     depthsAvail.forEach(dep=>{
       const b=document.createElement('button');
@@ -586,20 +824,250 @@ function renderDetail(o){
     });
     drawGostProfile(document.getElementById('gostChart'), o, curWell);
     drawIsopleth(document.getElementById('isoChart'), o, curWell);
-    // ряды тренда по выбранным глубинам выбранной скважины
     const wd=o.prof[curWell];
     const list=[...curDepths].sort((a,b)=>a-b).map((dep,i)=>{
       const s=wellDepthSeries(wd, dep);
       return {label:dep+' м', xs:s.xs, ys:s.ys, color:DATE_COLORS[i%DATE_COLORS.length]};
     }).filter(s=>s.ys.length>=2);
     drawTrend(document.getElementById('trendChart'), list);
-    // ввод расчётной температуры
-    const inp=document.getElementById('tcalcInp');
-    inp.onchange=()=>{ const v=parseFloat(inp.value);
-      if(isNaN(v)) delete TCALC[o.a]; else TCALC[o.a]=v;
-      saveTCALC(); drawMarkers(); renderStats(); renderDetail(o); };
   }
 }
+
+function tabGeod(o, el){
+  el.innerHTML=`
+  <div class="normref">ГОСТ 24846-2019 «Грунты. Методы измерения деформаций оснований зданий и сооружений»; ГОСТ 53778-2010 (геодезические наблюдения за деформациями); СП 25.13330.2020 (разд. 13 — наблюдения за зданиями). Осадка — от исходной отметки цикла наблюдений.</div>
+  <table class="rows"><thead><tr>
+    <th style="width:15%">Дата</th><th style="width:13%">Марка №</th><th style="width:15%">Отметка, м</th><th style="width:14%">Осадка, мм</th><th style="width:16%">Скорость, мм/год</th><th>Примечание</th><th></th>
+  </tr></thead><tbody></tbody></table>
+  <button class="addrow">+ добавить измерение</button>
+  <div class="sect">График осадок во времени</div>
+  <canvas class="plot" id="geodChart"></canvas>`;
+  renderRows(o, el, 'geod', ['date','marka','otm','osad','speed','note']);
+  const c=cardOf(o.a);
+  const byM={};
+  (c.geod||[]).forEach(r=>{
+    const v=parseFloat(String(r.osad||'').replace(',','.'));
+    if(r.date&&!isNaN(v)&&String(r.osad).trim()!==''){
+      const k=r.marka||'?';
+      (byM[k]=byM[k]||{xs:[],ys:[]}); byM[k].xs.push(r.date); byM[k].ys.push(v);
+    }
+  });
+  const list=Object.entries(byM).map(([m,s],i)=>({label:'Марка '+m, xs:s.xs, ys:s.ys, color:DATE_COLORS[i%DATE_COLORS.length]})).filter(s=>s.ys.length>=2);
+  const cv=document.getElementById('geodChart');
+  if(list.length){ drawTrend(cv, list); } else { cv.style.display='none'; }
+}
+
+function tabExpl(o, el){
+  el.innerHTML=`
+  <div class="normref">ГОСТ 31937-2024 (обследование и мониторинг); СП 25.13330.2020 (разд. 13 — требования при эксплуатации); ВСН 01-89 «Предприятия по эксплуатации зданий и сооружений на вечной мерзлоте».</div>
+  <table class="kv">
+    <tr><td>Температура воздуха в подполе, °C</td><td>${inp(o,'ex','tpodpol','')}</td></tr>
+    <tr><td>Вентиляция подпола (продухи)</td><td>${sel(o,'ex','vent','', ['','в порядке','частично заложены','заложены','не предусмотрены'])}</td></tr>
+    <tr><td>Состояние отмостки / цоколя</td><td>${sel(o,'ex','otmost','', ['','удовлетворительное','локальные повреждения','разрушена','отсутствует'])}</td></tr>
+    <tr><td>Протечки инженерных сетей</td><td>${sel(o,'ex','leak','', ['','нет','единичные (устранены)','регулярные','постоянные'])}</td></tr>
+    <tr><td>Снегонакопление у цоколя</td><td>${sel(o,'ex','sneg','', ['','убирается регулярно','убирается нерегулярно','не убирается'])}</td></tr>
+    <tr><td>Последний осмотр (дата)</td><td>${inp(o,'ex','osmotr','','date')}</td></tr>
+    <tr><td>Примечания по эксплуатации</td><td><textarea class="ed" data-scope="ex" data-k="note" rows="2">${esc(edVal(o,'ex','note',''))}</textarea></td></tr>
+  </table>`;
+  wireEd(o, el, 'ex');
+}
+
+function tabPhoto(o, el){
+  const c=cardOf(o.a); c.photos=c.photos||[];
+  el.innerHTML=`
+  <div class="normref">Фотофиксация — ГОСТ 31937-2024 (материалы к отчёту об обследовании): общие виды, цоколь и отмостка, подпол, устья термометрических скважин, дефекты. Фото сжимаются и хранятся локально в браузере.</div>
+  <input type="file" id="phFile" accept="image/*" multiple style="display:none">
+  <button class="addrow" id="phAdd">+ добавить фотографии</button>
+  <div class="photos" id="phGrid"></div>`;
+  const grid=el.querySelector('#phGrid');
+  function paint(){
+    grid.innerHTML='';
+    c.photos.forEach((p,i)=>{
+      const f=document.createElement('figure');
+      f.innerHTML='<img src="'+p.src+'" title="'+esc(p.n)+'"><figcaption><span>'+esc(p.d||'')+'</span><button class="delrow">✕</button></figcaption>';
+      f.querySelector('img').onclick=()=>{ const w=window.open(); w.document.write('<img src="'+p.src+'" style="max-width:100%">'); };
+      f.querySelector('.delrow').onclick=()=>{ c.photos.splice(i,1); saveCARD(); paint(); };
+      grid.appendChild(f);
+    });
+  }
+  paint();
+  el.querySelector('#phAdd').onclick=()=>el.querySelector('#phFile').click();
+  el.querySelector('#phFile').onchange=ev=>{
+    [...ev.target.files].forEach(file=>{
+      const r=new FileReader();
+      r.onload=()=>{ const img=new Image();
+        img.onload=()=>{ const cv=document.createElement('canvas');
+          const s=Math.min(1, 900/Math.max(img.width,img.height));
+          cv.width=Math.round(img.width*s); cv.height=Math.round(img.height*s);
+          cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+          c.photos.push({n:file.name, d:new Date().toISOString().slice(0,10), src:cv.toDataURL('image/jpeg',0.72)});
+          saveCARD(); paint(); };
+        img.src=r.result; };
+      r.readAsDataURL(file);
+    });
+    ev.target.value='';
+  };
+}
+
+function tabMisc(o, el){
+  const c=cardOf(o.a); c.files=c.files||[];
+  el.innerHTML=`
+  <div class="normref">Прочие сведения: акты освидетельствования, предписания, переписка, схемы расположения скважин и геодезических марок и т. п.</div>
+  <table class="kv"><tr><td>Свободное примечание</td><td><textarea class="ed" data-scope="misc" data-k="note" rows="3">${esc(edVal(o,'misc','note',''))}</textarea></td></tr></table>
+  <input type="file" id="msFile" multiple style="display:none">
+  <button class="addrow" id="msAdd">+ прикрепить файл (до 300 КБ)</button>
+  <div id="msList"></div>`;
+  wireEd(o, el, 'misc');
+  const lst=el.querySelector('#msList');
+  function paint(){
+    lst.innerHTML='';
+    c.files.forEach((f,i)=>{
+      const d=document.createElement('div');
+      d.style.cssText='font-size:12.5px; margin:4px 0';
+      d.innerHTML='<a href="'+f.src+'" download="'+esc(f.n)+'">📎 '+esc(f.n)+'</a> <span class="note">'+esc(f.d||'')+'</span> <button class="delrow">✕</button>';
+      d.querySelector('.delrow').onclick=()=>{ c.files.splice(i,1); saveCARD(); paint(); };
+      lst.appendChild(d);
+    });
+  }
+  paint();
+  el.querySelector('#msAdd').onclick=()=>el.querySelector('#msFile').click();
+  el.querySelector('#msFile').onchange=ev=>{
+    [...ev.target.files].forEach(file=>{
+      if(file.size>300*1024){ alert('Файл больше 300 КБ не сохраняется в браузере: '+file.name); return; }
+      const r=new FileReader();
+      r.onload=()=>{ c.files.push({n:file.name, d:new Date().toISOString().slice(0,10), src:r.result}); saveCARD(); paint(); };
+      r.readAsDataURL(file);
+    });
+    ev.target.value='';
+  };
+}
+
+/* ---------- загрузка данных по шаблону ---------- */
+function buildAddrIndex(){
+  addrIndex={};
+  DB.objects.forEach((o,i)=>{ addrIndex[normAddrKey(o.a)]=i; });
+}
+function mergeUserRec(rec){
+  if(!addrIndex) buildAddrIndex();
+  const ai=addrIndex[normAddrKey(rec.a)];
+  if(ai===undefined) return false;
+  const o=DB.objects[ai]; o.prof=o.prof||{};
+  const wd=(o.prof[rec.w]=o.prof[rec.w]||{dep:null, s:[]});
+  if(rec.dep!==null&&rec.dep!==undefined) wd.dep=rec.dep;
+  let ent=wd.s.find(x=>x[0]===rec.date);
+  if(!ent){ ent=[rec.date,[]]; wd.s.push(ent); wd.s.sort((a,b)=>a[0]<b[0]?-1:1); }
+  rec.pts.forEach(([d,t])=>{ const ex=ent[1].find(p=>p[0]===d); if(ex) ex[1]=t; else ent[1].push([d,t]); });
+  ent[1].sort((a,b)=>a[0]-b[0]);
+  return true;
+}
+function refreshObjStats(o){
+  if(!o.prof) return;
+  let nm=0, d0=o.d0, d1=o.d1;
+  Object.values(o.prof).forEach(wd=>wd.s.forEach(([dt,pts])=>{
+    nm+=pts.length; if(!d0||dt<d0) d0=dt; if(!d1||dt>d1) d1=dt;
+  }));
+  o.nm=nm; o.d0=d0; o.d1=d1;
+}
+function applyUserData(){
+  if(!USERDATA.length) return;
+  const touched=new Set();
+  USERDATA.forEach(rec=>{ if(mergeUserRec(rec)) touched.add(normAddrKey(rec.a)); });
+  touched.forEach(k=>refreshObjStats(DB.objects[addrIndex[k]]));
+}
+function parseDateCell(v){
+  if(v===null||v===undefined||v==='') return null;
+  if(v instanceof Date&&!isNaN(v)) return v.toISOString().slice(0,10);
+  if(typeof v==='number'&&v>20000&&v<60000){ const d=new Date(Math.round((v-25569)*86400000)); return d.toISOString().slice(0,10); }
+  const s=String(v).trim();
+  let m=s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/);
+  if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return s.slice(0,10);
+  return null;
+}
+function parseNum(v){
+  if(v===null||v===undefined||v==='') return null;
+  const n=parseFloat(String(v).replace(',','.').replace('−','-'));
+  return isNaN(n)?null:n;
+}
+async function handleUpload(file){
+  const log=document.getElementById('uplLog'); log.style.display='block'; log.textContent='Файл: '+file.name+'\n';
+  let rows=[];
+  try{
+    if(/\.csv$/i.test(file.name)){
+      const txt=await file.text();
+      const sep=(txt.split('\n')[0].match(/;/g)||[]).length>=3?';':',';
+      rows=txt.replace(/^﻿/,'').split(/\r?\n/).filter(l=>l.trim()).map(l=>l.split(sep).map(x=>x.trim().replace(/^"|"$/g,'')));
+    } else {
+      const ab=await file.arrayBuffer();
+      const wb=XLSX.read(ab);
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      rows=XLSX.utils.sheet_to_json(ws,{header:1, raw:true, defval:''});
+    }
+  }catch(e){ log.textContent+='Ошибка чтения файла: '+e; return; }
+  while(rows.length&&!String(rows[0][0]).toLowerCase().includes('адрес')) rows.shift();
+  if(rows.length) rows.shift();
+  if(!addrIndex) buildAddrIndex();
+  let added=0, skipped=0; const badAddr=new Set(); const grouped={};
+  rows.forEach(r=>{
+    if(r.length<7){ if(r.join('').trim()) skipped++; return; }
+    const addr=String(r[0]).trim(); if(!addr) return;
+    const key=normAddrKey(addr);
+    if(addrIndex[key]===undefined){ skipped++; badAddr.add(addr); return; }
+    const w=String(r[2]).trim()||'б/л';
+    const date=parseDateCell(r[3]);
+    const dep=parseNum(r[4]);
+    const d=parseNum(r[5]);
+    const t=parseNum(r[6]);
+    if(!date||d===null||t===null){ skipped++; return; }
+    const g=(grouped[key]=grouped[key]||{});
+    const gw=(g[w]=g[w]||{});
+    const gd=(gw[date]=gw[date]||{dep:dep, pts:{}});
+    if(dep!==null) gd.dep=dep;
+    gd.pts[d]=t; added++;
+  });
+  Object.entries(grouped).forEach(([key, wells])=>{
+    Object.entries(wells).forEach(([w, dates])=>{
+      Object.entries(dates).forEach(([date, rec])=>{
+        USERDATA.push({a:DB.objects[addrIndex[key]].a, w, date, dep:rec.dep, pts:Object.entries(rec.pts).map(([d,t])=>[+d,t])});
+      });
+    });
+  });
+  USERDATA.forEach(rec=>mergeUserRec(rec));
+  Object.keys(grouped).forEach(key=>refreshObjStats(DB.objects[addrIndex[key]]));
+  saveUSERDATA();
+  drawMarkers(); renderStats(); renderList();
+  if(curObj) renderDetail(curObj);
+  log.textContent+='Принято точек замеров: '+added+'\nОбъектов затронуто: '+Object.keys(grouped).length+'\nСтрок отклонено: '+skipped+'\n';
+  if(badAddr.size) log.textContent+='Адреса вне базы (не загружены):\n  '+[...badAddr].slice(0,20).join('\n  ')+(badAddr.size>20?'\n  …':'')+'\n';
+  log.textContent+='Данные сохранены в браузере и учтены в графиках и статусах.';
+}
+const uplModal=document.getElementById('uplModal');
+document.getElementById('uploadBtn').onclick=()=>uplModal.style.display='block';
+document.getElementById('uplClose').onclick=()=>uplModal.style.display='none';
+uplModal.addEventListener('click',e=>{ if(e.target===uplModal) uplModal.style.display='none'; });
+document.getElementById('uplPick').onclick=()=>document.getElementById('uplFile').click();
+document.getElementById('uplFile').addEventListener('change',e=>{ if(e.target.files[0]) handleUpload(e.target.files[0]); e.target.value=''; });
+document.getElementById('uplCsvTpl').onclick=()=>{
+  const rows=[['Адрес объекта','Район','Скважина (литера)','Дата замера','Глубина скважины, м','Глубина точки, м','Температура, °C','Источник'],
+    ['50 лет Октября 13','Центральный','Б/В/16','15.03.2026','20','0','7.85','Журнал мерзлотного надзора, 1 кв. 2026'],
+    ['50 лет Октября 13','Центральный','Б/В/16','15.03.2026','20','1','1.20',''],
+    ['50 лет Октября 13','Центральный','Б/В/16','15.03.2026','20','5','-0.90',''],
+    ['50 лет Октября 13','Центральный','Б/В/16','15.03.2026','20','10','-1.35','']];
+  const csv='﻿'+rows.map(r=>r.join(';')).join('\r\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download='Шаблон_загрузки_замеров.csv'; a.click();
+};
+document.getElementById('uplExport').onclick=()=>{
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(USERDATA,null,1)],{type:'application/json'}));
+  a.download='Мои_загрузки_геотермика.json'; a.click();
+};
+document.getElementById('uplClear').onclick=()=>{
+  if(!confirm('Удалить все загруженные вами замеры из браузера? Базовая база не изменится.')) return;
+  USERDATA=[]; saveUSERDATA(); location.reload();
+};
 
 /* ---------- настройки порогов ---------- */
 const setEl=document.getElementById('settings');
