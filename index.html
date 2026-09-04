@@ -1591,6 +1591,7 @@ function tabPlans(o, el){
   <div class="normref">Планы формируются по выявленным дефектам и сработавшим правилам статуса; структура — по СП 497.1325800.2020 (мероприятия при эксплуатации на ММГ) и ГОСТ 31937-2024. Строки редактируются.</div>
   <button class="addrow" id="planDraft" style="border-style:solid">⚙ Сформировать проект плана автоматически (по дефектам и статусу)</button>
   <button class="addrow" id="planWord" style="border-style:solid; border-color:var(--c-centr); color:var(--c-centr)">⬇ Оформить подробный план в Word (по действующим нормам)</button>
+  <button class="addrow" id="planXls" style="border-style:solid; border-color:var(--c-centr); color:var(--c-centr)">⬇ Выгрузить план в Excel (в работу УК)</button>
   <div class="sect">План текущего / капитального ремонта</div>
   <table class="rows"><thead><tr>
     <th style="width:14%">Элемент</th><th style="width:26%">Дефект / повреждение</th><th style="width:26%">Мероприятие</th><th style="width:10%">Вид</th><th style="width:9%">Приоритет</th><th style="width:8%">Срок</th><th>Примечание</th><th></th>
@@ -1606,6 +1607,27 @@ function tabPlans(o, el){
   renderRows2(o, tbls[1], 'planAv', ['mer','obsn','prio','srok','ctrl'], {prio:['плановый','высокий','немедленно']}, el.querySelectorAll('.addrow')[2]);
   el.querySelector('#planDraft').onclick=()=>{ if(draftPlans(o)) renderDetail(o); else alert('План уже содержит строки (очистите для повторной генерации) или нет данных для формирования.'); };
   el.querySelector('#planWord').onclick=()=>exportPlanWord(o);
+  el.querySelector('#planXls').onclick=()=>exportPlanXls(o);
+}
+
+/* ---------- выгрузка плана мероприятий в Excel ---------- */
+function exportPlanXls(o){
+  const c=cardOf(o.a);
+  if(!(c.planRep&&c.planRep.length)&&!(c.planAv&&c.planAv.length)) draftPlans(o);
+  const rep=c.planRep||[], av=c.planAv||[];
+  if(!rep.length&&!av.length){ alert('План пуст — сначала сформируйте проект плана или добавьте строки.'); return; }
+  const wb=XLSX.utils.book_new();
+  const head1=['№','Элемент','Дефект / повреждение','Мероприятие','Вид','Приоритет','Срок','Примечание'];
+  const ws1=XLSX.utils.aoa_to_sheet([['План текущего / капитального ремонта — '+o.a+', г. Норильск · УК: '+effectiveUK(o)+' · сформирован '+new Date().toLocaleDateString('ru-RU')],[],head1]
+    .concat(rep.map((r,i)=>[i+1,r.elem,r.def,r.mer,r.kind,r.prio,r.srok,r.note])));
+  ws1['!cols']=[{wch:4},{wch:20},{wch:40},{wch:46},{wch:12},{wch:10},{wch:10},{wch:24}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'План ремонта');
+  const head2=['№','Мероприятие','Обоснование (сработавшее правило)','Приоритет','Срок','Контроль'];
+  const ws2=XLSX.utils.aoa_to_sheet([['План противоаварийных / компенсирующих мероприятий (восстановление работоспособности основания и фундаментов) — '+o.a],[],head2]
+    .concat(av.map((r,i)=>[i+1,r.mer,r.obsn,r.prio,r.srok,r.ctrl])));
+  ws2['!cols']=[{wch:4},{wch:50},{wch:50},{wch:12},{wch:10},{wch:22}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Противоаварийные мероприятия');
+  XLSX.writeFile(wb, 'План_мероприятий_'+o.a.replace(/[\s\/]+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
 }
 
 /* ---------- экспорт плана мероприятий в Word ---------- */
