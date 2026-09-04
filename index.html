@@ -285,14 +285,14 @@
   </div>
 </div>
 
-<script src="db_p1.js?v=89057a60"></script>
-<script src="db_p2.js?v=89057a60"></script>
-<script src="db_p3.js?v=89057a60"></script>
-<script src="db_p4.js?v=89057a60"></script>
-<script src="db_p5.js?v=89057a60"></script>
-<script src="db_p6.js?v=89057a60"></script>
-<script src="db_p7.js?v=89057a60"></script>
-<script src="db_p8.js?v=89057a60"></script>
+<script src="db_p1.js?v=f36ebe5f"></script>
+<script src="db_p2.js?v=f36ebe5f"></script>
+<script src="db_p3.js?v=f36ebe5f"></script>
+<script src="db_p4.js?v=f36ebe5f"></script>
+<script src="db_p5.js?v=f36ebe5f"></script>
+<script src="db_p6.js?v=f36ebe5f"></script>
+<script src="db_p7.js?v=f36ebe5f"></script>
+<script src="db_p8.js?v=f36ebe5f"></script>
 
 <div id="loginModal">
   <form class="lbox" id="loginForm">
@@ -783,7 +783,7 @@ function drawIsopleth(cv, o, wliter){
 function fmt(v,u){return (v===null||v===undefined)?'—':v+(u||'')}
 function esc(s){return String(s===null||s===undefined?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 let curObj=null, curWell=null, curDepths=new Set(), curTab='passport';
-const TABS=[['passport','Паспорт объекта'],['fund','Фундаменты'],['podpol','Подполье'],['cokper','Цокольное перекрытие'],['cokogr','Цокольное ограждение'],['geoterm','Геотермика'],['geod','Геодезия'],['expl','Условия эксплуатации'],['plans','Планы'],['project','Проектная документация'],['igi','Инженерно-геология'],['photo','Фотоматериалы'],['misc','Иное']];
+const TABS=[['passport','Паспорт объекта'],['fund','Фундаменты'],['podpol','Подполье'],['cokper','Цокольное перекрытие'],['cokogr','Цокольное ограждение'],['geoterm','Геотермика'],['geod','Геодезия'],['expl','Условия эксплуатации'],['plans','Планы'],['project','Проектная документация'],['igi','Инженерно-геологические условия'],['photo','Фотоматериалы'],['misc','Иное']];
 
 function select(i,fromList){
   const o=DB.objects[i]; curObj=o;
@@ -1011,8 +1011,20 @@ function tabProject(o, el){
 }
 
 function tabIGI(o, el){
+  const grunts=o.igi_grunts||(((o.pf2||{}).grunts||'').trim());
+  const meaningful=grunts&&!/не (предостав|представ)|отсутств/i.test(grunts)&&grunts.length>20;
+  const p=o.pf2||{};
   el.innerHTML=`
   <div class="normref">СП 47.13330.2016 «Инженерные изыскания для строительства»; СП 11-105-97 (ч. II — мерзлотные грунты); классификация грунтов — ГОСТ 25100-2020; отчёт ИГИ — по схеме СП 47.13330 (прил. В).</div>
+  <div class="sect">Инженерно-геологические условия основания</div>
+  <table class="kv">
+    <tr><td>Грунты основания</td><td>${meaningful?esc(grunts):'Отчёты ИГИ заказчиком не предоставлены (по материалам мерзлотного надзора)'}</td></tr>
+    ${p.princip?`<tr><td>Принцип использования ММГ</td><td>${esc(p.princip)}</td></tr>`:''}
+    ${o.ngc?`<tr><td>Глубина НГК / T на НГК</td><td>${o.ngc.h} м / ${o.ngc.t} °C (по рядам замеров)</td></tr>`:''}
+    ${p.fund?`<tr><td>Фундаменты (по отчёту)</td><td>${esc(p.fund)}</td></tr>`:''}
+  </table>
+  <div class="note">При наличии отчётов инженерно-геологических изысканий по объекту — зарегистрируйте их ниже и внесите ИГЭ.</div>
+  <div class="sect">Реестр отчётов ИГИ</div>
   <table class="rows"><thead><tr>
     <th style="width:22%">Отчёт ИГИ / инв. №</th><th style="width:8%">Год</th><th style="width:18%">Организация</th><th style="width:13%">Скважины ИГИ</th><th style="width:19%">Грунты (ИГЭ)</th><th style="width:8%">УГВ, м</th><th>Примечание</th><th></th>
   </tr></thead><tbody></tbody></table>
@@ -1678,7 +1690,7 @@ function enterApp(role){
 })();
 
 };
-const ENC={saltV:"uVPl6fmPJ9C/BXsIhVIIKw==",ivV:"ildiMUjIk9xNhIew",wrapV:"dpY1GtqUYnOp5wD6JnS1QOCaIf2jxOWl3MfRWxmHXfZsO89V1QRT+XB8ARf8qs7L",saltE:"anoAXfWvoB0CqXzRhZsb/w==",ivE:"TGS+TlS5myuTb3r1",wrapE:"ciQyMy9dTomS5QKGw+D/gzQScsYNbtnVbh/onmSx+DGiiBaKwDlR4o7L6iM/of1Y",ivD:"w73lS4h+dzZJZ/J6"};
+const ENC={saltV:"uVPl6fmPJ9C/BXsIhVIIKw==",ivV:"ildiMUjIk9xNhIew",wrapV:"dpY1GtqUYnOp5wD6JnS1QOCaIf2jxOWl3MfRWxmHXfZsO89V1QRT+XB8ARf8qs7L",saltE:"anoAXfWvoB0CqXzRhZsb/w==",ivE:"TGS+TlS5myuTb3r1",wrapE:"ciQyMy9dTomS5QKGw+D/gzQScsYNbtnVbh/onmSx+DGiiBaKwDlR4o7L6iM/of1Y",ivD:"UVdVqjiNzusp0Pux"};
 function enterApp(role){ sessionStorage.setItem("ngk_role",role); document.body.classList.add("authed","role-"+role); document.getElementById("loginModal").style.display="none"; document.getElementById("roleBadge").textContent=role==="edit"?"оператор":"наблюдатель"; }
 const _b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 async function _unwrap(pw,saltB,ivB,wrapB){
