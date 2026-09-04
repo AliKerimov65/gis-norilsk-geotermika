@@ -182,14 +182,14 @@
   </div>
 </div>
 
-<script src="db_p1.js?v=8378922f"></script>
-<script src="db_p2.js?v=8378922f"></script>
-<script src="db_p3.js?v=8378922f"></script>
-<script src="db_p4.js?v=8378922f"></script>
-<script src="db_p5.js?v=8378922f"></script>
-<script src="db_p6.js?v=8378922f"></script>
-<script src="db_p7.js?v=8378922f"></script>
-<script src="db_p8.js?v=8378922f"></script>
+<script src="db_p1.js?v=66074426"></script>
+<script src="db_p2.js?v=66074426"></script>
+<script src="db_p3.js?v=66074426"></script>
+<script src="db_p4.js?v=66074426"></script>
+<script src="db_p5.js?v=66074426"></script>
+<script src="db_p6.js?v=66074426"></script>
+<script src="db_p7.js?v=66074426"></script>
+<script src="db_p8.js?v=66074426"></script>
 <script>window.__initApp=function(){
 const DCOL = {"Центральный":"#2f6fb2","Талнах":"#c05a2e","Кайеркан":"#3d8a5a"};
 const SCOL = {"НОРМА":"#2e7d32","РИСК":"#e08a00","КРИТИЧНО":"#c8372d"};
@@ -725,20 +725,34 @@ function renderRows(o, el, scope, keys, selects){
   el.querySelector('.addrow').onclick=()=>{ c[scope].push({}); saveCARD(); paint(); };
 }
 
+/* --- извлечённый паспорт (годовые отчёты НПО «Фундамент» + «Жилье-архив» ЖКС) --- */
+const PF2_LABELS=[['year_in','Ввод в эксплуатацию'],['project','Проект / серия'],['dims','Основные размеры'],['floors_txt','Этажность'],['konstr','Конструктивная схема'],['princip','Принцип использования грунтов'],['grunts','Грунты основания'],['fund','Фундаменты'],['rostverk','Ростверк'],['podpol_plan','Подполье / планировка'],['lotok','Водоотводной лоток'],['vent','Вентилирование подполья'],['otmostka','Отмостка'],['cokol','Цокольное ограждение'],['heating','Отопление и канализация'],['walls','Наружные стены'],['walls_in','Внутренние стены'],['roof','Кровля'],['windows','Оконные заполнения'],['arc_year','Год постройки (архив)'],['arc_series','Серия (архив)'],['arc_floors','Этажей (архив)'],['arc_walls_mat','Материал стен (архив)'],['arc_volume','Объём здания, м³'],['arc_area','Площадь по дому, м²'],['arc_piles','Кол-во свай'],['arc_area_podpol','Площадь подполья, м²'],['geoterm_obs','Геотермические наблюдения'],['geod_obs','Геодезические наблюдения']];
+function passportBlock(o){
+  const p=o.pf2; if(!p) return '';
+  const rows=PF2_LABELS.filter(([k])=>p[k]).map(([k,l])=>`<tr><td>${l}</td><td>${esc(p[k])}</td></tr>`).join('');
+  if(!rows) return '';
+  const src=p.report_year?`Информационный отчёт ООО «НПО «Фундамент», ${p.report_year} г.`:'';
+  const srcA=p.arc_year?'«Жилье-архив» ООО «ЖКС»':'';
+  return `<div class="sect">Паспортные характеристики (извлечены из архива ЖКС)</div>
+  <table class="kv">${rows}</table>
+  <div class="note">Источники: ${[src,srcA].filter(Boolean).join(' · ')}. Значения даны как в документах, без редактирования.</div>`;
+}
+
 function tabPassport(o, el){
   const wells=o.prof?Object.keys(o.prof):[];
   const prec={'точный':'точный адрес (OSM)','по улице':'центроид улицы','nominatim':'Nominatim/OSM'}[o.p]||'—';
   el.innerHTML=`
   <div class="normref">Состав сведений: ГОСТ 31937-2024 «Здания и сооружения. Правила обследования и мониторинга технического состояния» (паспорт объекта мониторинга); СП 25.13330.2020 (разд. 5 — принципы использования вечномерзлых грунтов); ПП РФ № 491 (п. 24–26, состав технической документации на МКД). Поля редактируются и сохраняются локально в браузере.</div>
+  ${passportBlock(o)}
   <table class="kv">
     <tr><td>Адрес</td><td>г. Норильск, ${esc(o.a)}</td></tr>
     <tr><td>Район</td><td>${esc(o.d||'—')}</td></tr>
     <tr><td>Управляющая компания</td><td>${sel(o,'pf','uk', o.uk||'Не определена', UK_LIST.concat(['Не определена']))}</td></tr>
     <tr><td>Координаты (WGS-84)</td><td>${fmt(o.lat)}, ${fmt(o.lon)} <span style="color:var(--mut)">(${prec})</span></td></tr>
-    <tr><td>Год постройки</td><td>${inp(o,'pf','year', o.y??'')}</td></tr>
-    <tr><td>Серия / тип проекта</td><td>${inp(o,'pf','series', o.s??'')}</td></tr>
-    <tr><td>Этажность</td><td>${inp(o,'pf','floors','')}</td></tr>
-    <tr><td>Конструктивная схема</td><td>${inp(o,'pf','konstr','')}</td></tr>
+    <tr><td>Год постройки</td><td>${inp(o,'pf','year', o.y??(o.pf2&&((o.pf2.year_in||'').match(/\d{4}/)||[])[0])??(o.pf2&&o.pf2.arc_year)??'')}</td></tr>
+    <tr><td>Серия / тип проекта</td><td>${inp(o,'pf','series', o.s??(o.pf2&&(o.pf2.project||o.pf2.arc_series))??'')}</td></tr>
+    <tr><td>Этажность</td><td>${inp(o,'pf','floors', (o.pf2&&(o.pf2.arc_floors||o.pf2.floors_txt))??'')}</td></tr>
+    <tr><td>Конструктивная схема</td><td>${inp(o,'pf','konstr', (o.pf2&&o.pf2.konstr)||'')}</td></tr>
     <tr><td>Тип фундамента</td><td>${sel(o,'pf','fund','', ['','свайный, без ростверка','свайный с ростверком','ленточный','плитный','столбчатый','иной'])}</td></tr>
     <tr><td>Принцип использования ММГ (СП 25.13330, п. 5.4)</td><td>${sel(o,'pf','princip','', ['','I — с сохранением мёрзлого состояния','II — с допущением оттаивания','IIа — с предварительным оттаиванием','иной'])}</td></tr>
     <tr><td>Расчётная температура основания T<sub>расч</sub></td><td><input class="ed" data-scope="pf" data-k="tcalc" id="tcalcInp" type="number" step="0.1" style="width:90px" value="${edVal(o,'pf','tcalc', TCALC[o.a]!==undefined?TCALC[o.a]:'')}"> °C</td></tr>
