@@ -131,6 +131,12 @@
   #logoutBtn:hover{background:#1b2c3a}
   body.role-view #uploadBtn, body.role-view .addrow, body.role-view .delrow{display:none !important}
   body.role-view input.ed, body.role-view select.ed, body.role-view textarea.ed{pointer-events:none; border-color:transparent !important; background:transparent !important}
+  /* причины статуса */
+  .reasons{margin:6px 0 4px; border:1px solid var(--line); border-radius:6px; background:#fff; padding:6px 10px}
+  .rsn{font-size:12.2px; padding:2px 0; line-height:1.4}
+  .rsn.r-crit{color:var(--crit)}
+  .rsn.r-risk{color:#a86400}
+  .rsn.r-ok{color:var(--ok)}
 </style>
 </head>
 <body>
@@ -206,14 +212,14 @@
   </div>
 </div>
 
-<script src="db_p1.js?v=e9674285"></script>
-<script src="db_p2.js?v=e9674285"></script>
-<script src="db_p3.js?v=e9674285"></script>
-<script src="db_p4.js?v=e9674285"></script>
-<script src="db_p5.js?v=e9674285"></script>
-<script src="db_p6.js?v=e9674285"></script>
-<script src="db_p7.js?v=e9674285"></script>
-<script src="db_p8.js?v=e9674285"></script>
+<script src="db_p1.js?v=e6420daf"></script>
+<script src="db_p2.js?v=e6420daf"></script>
+<script src="db_p3.js?v=e6420daf"></script>
+<script src="db_p4.js?v=e6420daf"></script>
+<script src="db_p5.js?v=e6420daf"></script>
+<script src="db_p6.js?v=e6420daf"></script>
+<script src="db_p7.js?v=e6420daf"></script>
+<script src="db_p8.js?v=e6420daf"></script>
 
 <div id="loginModal">
   <form class="lbox" id="loginForm">
@@ -301,43 +307,57 @@ function objDepthSeries(o, depth){ // средний ряд по скважин�
 }
 function geodMetrics(o){ // макс. скорость последнего цикла и макс. суммарная осадка по маркам
   if(!o.geod) return null;
-  let maxSpeed=0, maxOsad=0;
-  Object.values(o.geod).forEach(s=>{
+  let maxSpeed=0, maxOsad=0, speedMark='', osadMark='';
+  Object.entries(o.geod).forEach(([mk,s])=>{
     if(s.length>=2){
       const [d0,v0]=s[s.length-2], [d1,v1]=s[s.length-1];
       const yrs=(new Date(d1)-new Date(d0))/3.15576e10;
-      if(yrs>0.05){ const sp=Math.abs(v1-v0)/yrs; if(sp>maxSpeed) maxSpeed=sp; }
+      if(yrs>0.05){ const sp=Math.abs(v1-v0)/yrs; if(sp>maxSpeed){ maxSpeed=sp; speedMark=mk; } }
     }
-    if(s.length){ const v=Math.abs(s[s.length-1][1]); if(v>maxOsad) maxOsad=v; }
+    if(s.length){ const v=Math.abs(s[s.length-1][1]); if(v>maxOsad){ maxOsad=v; osadMark=mk; } }
   });
-  return {maxSpeed, maxOsad};
+  return {maxSpeed, maxOsad, speedMark, osadMark};
 }
-function statusOf(o){
-  if(!o.prof&&!o.geod) return null;
+function statusDetail(o){ // статус + причины (какие правила сработали)
+  if(!o.prof&&!o.geod) return {status:null, reasons:[]};
   const tc=TCALC[o.a];
-  let crit=false, risk=false;
-  Object.values(o.prof||{}).forEach(wd=>{
-    if(!wd.s.length) return;
-    const last=wd.s[wd.s.length-1][1];
-    last.forEach(([d,t])=>{ if(d>=TH.depth && t>=TH.tcrit) crit=true; });
-    // тренд на контрольной глубине
-    const s=wellDepthSeries(wd, TH.trendDepth);
-    if(s.ys.length>=2){ const k=linreg(s.xs,s.ys); if(k!==null && k>TH.trend) risk=true; }
-  });
-  if(tc!==undefined && o.ngc){
-    Object.values(o.prof||{}).forEach(wd=>{
-      const s=wellDepthSeries(wd, o.ngc.h);
-      if(s.ys.length){ const tlast=s.ys[s.ys.length-1]; if(tlast > tc + TH.above) risk=true; }
+  const reasons=[];
+  if(o.prof){
+    // КРИТИЧНО: температура на глубине
+    let worstT=null;
+    Object.entries(o.prof).forEach(([w,wd])=>{
+      if(!wd.s.length) return;
+      const lastEnt=wd.s[wd.s.length-1], dt=lastEnt[0], pts=lastEnt[1];
+      pts.forEach(([d,t])=>{ if(d>=TH.depth&&t>=TH.tcrit&&(!worstT||t>worstT.t)) worstT={w,d,t,dt}; });
     });
+    if(worstT) reasons.push({level:'crit', text:`температура ${worstT.t} °C на глубине ${worstT.d} м ≥ порога ${TH.tcrit} °C (скв. ${worstT.w}, замер ${worstT.dt})`});
+    // РИСК: тренд потепления
+    let worstK=null;
+    Object.entries(o.prof).forEach(([w,wd])=>{
+      const s=wellDepthSeries(wd, TH.trendDepth);
+      if(s.ys.length>=2){ const k=linreg(s.xs,s.ys); if(k!==null&&k>TH.trend&&(!worstK||k>worstK.k)) worstK={w,k}; }
+    });
+    if(worstK) reasons.push({level:'risk', text:`тренд потепления +${worstK.k.toFixed(2)} °C/год на глубине ${TH.trendDepth} м > порога ${TH.trend} °C/год (скв. ${worstK.w})`});
+    // РИСК: превышение расчётной температуры
+    if(tc!==undefined&&o.ngc){
+      let worstD=null;
+      Object.entries(o.prof).forEach(([w,wd])=>{
+        const s=wellDepthSeries(wd, o.ngc.h);
+        if(s.ys.length){ const tl=s.ys[s.ys.length-1]; const dv=tl-tc; if(dv>TH.above&&(!worstD||dv>worstD.dv)) worstD={w,tl,dv}; }
+      });
+      if(worstD) reasons.push({level:'risk', text:`T на уровне НГК ${worstD.tl} °C выше расчётной ${tc} °C на ${worstD.dv.toFixed(1)} °C > порога ${TH.above} °C (скв. ${worstD.w})`});
+    }
   }
-  // деформации основания (геодезия)
   const gm=geodMetrics(o);
   if(gm){
-    if(gm.maxSpeed>=TH.geodCritSpeed||gm.maxOsad>=TH.geodCritTotal) crit=true;
-    else if(gm.maxSpeed>=TH.geodRiskSpeed) risk=true;
+    if(gm.maxSpeed>=TH.geodCritSpeed) reasons.push({level:'crit', text:`скорость осадки ${gm.maxSpeed.toFixed(1)} мм/год ≥ порога ${TH.geodCritSpeed} мм/год (марка ${gm.speedMark})`});
+    else if(gm.maxSpeed>=TH.geodRiskSpeed) reasons.push({level:'risk', text:`скорость осадки ${gm.maxSpeed.toFixed(1)} мм/год ≥ порога ${TH.geodRiskSpeed} мм/год (марка ${gm.speedMark})`});
+    if(gm.maxOsad>=TH.geodCritTotal) reasons.push({level:'crit', text:`суммарная осадка ${gm.maxOsad.toFixed(0)} мм ≥ порога ${TH.geodCritTotal} мм (марка ${gm.osadMark})`});
   }
-  return crit?"КРИТИЧНО":(risk?"РИСК":"НОРМА");
+  const crit=reasons.some(r=>r.level==='crit'), risk=reasons.some(r=>r.level==='risk');
+  return {status: crit?'КРИТИЧНО':(risk?'РИСК':'НОРМА'), reasons};
 }
+function statusOf(o){ return statusDetail(o).status; }
 
 /* ---------- карта ---------- */
 const map = L.map('map',{zoomControl:true}).setView([69.355,88.20], 12);
@@ -707,10 +727,14 @@ function select(i,fromList){
 
 function renderDetail(o){
   const d=document.getElementById('detail');
-  const st=statusOf(o);
+  const sd=statusDetail(o); const st=sd.status;
+  const reasonsHtml = sd.reasons.length
+    ? `<div class="reasons">${sd.reasons.map(r=>`<div class="rsn r-${r.level}">${r.level==='crit'?'⛔':'⚠️'} ${esc(r.text)}</div>`).join('')}</div>`
+    : (st?'<div class="reasons"><div class="rsn r-ok">✔ все показатели в пределах превентивных порогов</div></div>':'');
   d.innerHTML=`
     <h2>${esc(o.a)}<span class="badge ${st?('b-'+{НОРМА:'ok',РИСК:'risk',КРИТИЧНО:'crit'}[st]):'b-card'}">${st||'карточка'}</span></h2>
     <div class="rayon">Район: <b style="color:${DCOL[o.d]||'#666'}">${esc(o.d||'не определён')}</b> · УК: <b>${esc(effectiveUK(o))}</b> · г. Норильск</div>
+    ${reasonsHtml}
     <div class="tabs" id="cardTabs"></div>
     <div id="tabBody"></div>`;
   const tb=document.getElementById('cardTabs');
@@ -1210,7 +1234,7 @@ function enterApp(role){
 })();
 
 };
-const ENC={saltV:"LONk875KyIm9+9Bei5dHRA==",ivV:"ee1iJ4mNN6udeBig",wrapV:"W4l1OmweZOsSDsyN86cyugUYb1Ms0Qje7Oje7LrThfNDs/HnEie8y6Z6qzNCLyAi",saltE:"R2sC5C9zjjCTcC/l3SHzcA==",ivE:"JlowbraxkvkZb/rE",wrapE:"R3NppLouux9z4jtKwIXkcbg4gRvUWz5hNuWZENtKmYzWL+OkAxdskJNOcLfDyfaD",ivD:"ibR/C06RtAfADWbL"};
+const ENC={saltV:"9zTzExKJf5UOsZ6+rREplg==",ivV:"iBgExFgGRVmr+e/T",wrapV:"DiYy1dzW2dq9RYm/bjCqdM2nVAdzDPLLvqZUsWvKSWYXmGWkwbdbVm1EhP3ost/Q",saltE:"qZ7WesrevpO0wHbF+vgxmQ==",ivE:"UBEsHnOSO6MThh0W",wrapE:"vQvfE1VDBt+nWsPTqKmKCaiZhJ6oUE7OAmqzJ+FnSOddS1/twe8Fcsna4gr9/Yhr",ivD:"Tn1xhf+uerXU/bvw"};
 function enterApp(role){ sessionStorage.setItem("ngk_role",role); document.body.classList.add("authed","role-"+role); document.getElementById("loginModal").style.display="none"; document.getElementById("roleBadge").textContent=role==="edit"?"оператор":"наблюдатель"; }
 const _b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 async function _unwrap(pw,saltB,ivB,wrapB){
