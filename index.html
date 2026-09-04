@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
 <style>
   :root{
     --bg:#0f1c26; --panel:#f5f2ec; --ink:#1d2733; --mut:#6b7684;
@@ -1589,6 +1590,7 @@ function tabPlans(o, el){
   el.innerHTML=`
   <div class="normref">Планы формируются по выявленным дефектам и сработавшим правилам статуса; структура — по СП 497.1325800.2020 (мероприятия при эксплуатации на ММГ) и ГОСТ 31937-2024. Строки редактируются.</div>
   <button class="addrow" id="planDraft" style="border-style:solid">⚙ Сформировать проект плана автоматически (по дефектам и статусу)</button>
+  <button class="addrow" id="planWord" style="border-style:solid; border-color:var(--c-centr); color:var(--c-centr)">⬇ Оформить подробный план в Word (по действующим нормам)</button>
   <div class="sect">План текущего / капитального ремонта</div>
   <table class="rows"><thead><tr>
     <th style="width:14%">Элемент</th><th style="width:26%">Дефект / повреждение</th><th style="width:26%">Мероприятие</th><th style="width:10%">Вид</th><th style="width:9%">Приоритет</th><th style="width:8%">Срок</th><th>Примечание</th><th></th>
@@ -1603,6 +1605,64 @@ function tabPlans(o, el){
   renderRows2(o, tbls[0], 'planRep', ['elem','def','mer','kind','prio','srok','note'], {kind:['текущий','капитальный'], prio:['плановый','высокий','немедленно']}, el.querySelectorAll('.addrow')[1]);
   renderRows2(o, tbls[1], 'planAv', ['mer','obsn','prio','srok','ctrl'], {prio:['плановый','высокий','немедленно']}, el.querySelectorAll('.addrow')[2]);
   el.querySelector('#planDraft').onclick=()=>{ if(draftPlans(o)) renderDetail(o); else alert('План уже содержит строки (очистите для повторной генерации) или нет данных для формирования.'); };
+  el.querySelector('#planWord').onclick=()=>exportPlanWord(o);
+}
+
+/* ---------- экспорт плана мероприятий в Word ---------- */
+async function exportPlanWord(o){
+  if(!window.docx){ alert('Библиотека Word не загрузилась (нужен интернет). Попробуйте ещё раз.'); return; }
+  const c=cardOf(o.a);
+  if(!(c.planRep&&c.planRep.length)&&!(c.planAv&&c.planAv.length)) draftPlans(o);
+  const rep=c.planRep||[], av=c.planAv||[];
+  const a=assess(o), sd=statusDetail(o), p=o.pf2||{};
+  const {Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType} = window.docx;
+  const T=(t,opts)=>new Paragraph({children:[new TextRun(Object.assign({text:String(t??'—'),font:'Times New Roman',size:22},opts||{}))], spacing:{after:80}});
+  const H=(t)=>new Paragraph({children:[new TextRun({text:t,bold:true,font:'Times New Roman',size:26})], spacing:{before:220,after:120}});
+  const cell=(t,b)=>new TableCell({children:[new Paragraph({children:[new TextRun({text:String(t??'—'),bold:!!b,font:'Times New Roman',size:18})]})]});
+  const tbl=(head,rows)=>new Table({width:{size:100,type:WidthType.PERCENTAGE},
+    rows:[new TableRow({children:head.map(h=>cell(h,true)), tableHeader:true}),
+          ...rows.map(r=>new TableRow({children:r.map(x=>cell(x))}))]});
+  const kids=[
+    new Paragraph({alignment:AlignmentType.CENTER, children:[new TextRun({text:'АНО «АНИИГБ» им. М.В. Кима', bold:true, font:'Times New Roman', size:24})]}),
+    new Paragraph({alignment:AlignmentType.CENTER, children:[new TextRun({text:'ПЛАН МЕРОПРИЯТИЙ ПО ВОССТАНОВЛЕНИЮ И ПОДДЕРЖАНИЮ РАБОТОСПОСОБНОСТИ ОСНОВАНИЯ И ФУНДАМЕНТОВ', bold:true, font:'Times New Roman', size:28})], spacing:{before:200,after:200}}),
+    T(`Объект: ${o.a}, район ${o.d||'—'}, г. Норильск`),
+    T(`Управляющая организация: ${effectiveUK(o)}`),
+    T(`Дата составления: ${new Date().toLocaleDateString('ru-RU')} · Составлено в ГИС-базе геотермического мониторинга зданий`),
+    H('1. Общие сведения об объекте'),
+    tbl(['Параметр','Значение'],[
+      ['Проект / серия', p.project||p.arc_series||'—'],
+      ['Год ввода в эксплуатацию', p.year_in||p.arc_year||o.y||'—'],
+      ['Фундаменты', p.fund||'—'],
+      ['Принцип использования ММГ', p.princip||'—'],
+      ['Глубина НГК / T на уровне НГК', o.ngc?`${o.ngc.h} м / ${o.ngc.t} °C`:'—'],
+      ['Термометрических скважин', o.prof?Object.keys(o.prof).length:'—'],
+      ['Период наблюдений', `${o.d0||'—'} … ${o.d1||'—'}`]]),
+    H('2. Оценка технического состояния'),
+    T(`Статус (превентивный): ${sd.status||'нет данных'}. Категория технического состояния: ${a.cat} (балл ${a.total===null?'—':a.total}).`),
+    T('Методика: балльная оценка (100 − штрафные баллы) по направлениям «грунты основания», «прочность (деформации)», «дефекты и повреждения»; итог — минимальный балл. Категории — по ГОСТ 31937-2024.'),
+    ...sd.reasons.map(r=>T(`— ${r.text}`)),
+    H('3. Выявленные дефекты и повреждения (по последнему отчёту мерзлотного надзора)'),
+    ...(o.defects? Object.entries(o.defects).map(([code,rows])=>T(`${({fund_piles:'Сваи',fund_rostverk:'Ростверк / балки',fund_ogolovki:'Оголовки свай',cok_perekrytie:'Плиты цокольного перекрытия',cok_ograd:'Цокольное ограждение',podpol:'Подполье'})[code]||code}: выявлено ${rows.length}`)).concat([]) : [T('Дефекты в отчётах не зарегистрированы / отчёты отсутствуют.')]),
+    H('4. План текущего / капитального ремонта'),
+    rep.length? tbl(['Элемент','Дефект / повреждение','Мероприятие','Вид','Приоритет','Срок','Примечание'],
+                    rep.map(r=>[r.elem,r.def,r.mer,r.kind,r.prio,r.srok,r.note]))
+              : T('Мероприятия не сформированы.'),
+    H('5. План противоаварийных / компенсирующих мероприятий (восстановление работоспособности основания и фундаментов)'),
+    av.length? tbl(['Мероприятие','Обоснование','Приоритет','Срок','Контроль'],
+                   av.map(r=>[r.mer,r.obsn,r.prio,r.srok,r.ctrl]))
+             : T('Мероприятия не требуются / не сформированы.'),
+    H('6. Контроль исполнения'),
+    T('Режимные геотермические наблюдения — по ГОСТ 25358-2020 (ежеквартально, оформление по прил. Д); геодезические наблюдения за осадками — по ГОСТ 24846-2019; визуальные обследования — по ГОСТ 31937-2024.'),
+    H('Нормативная база'),
+    T('ГОСТ 31937-2024; ГОСТ 25358-2020; ГОСТ 24846-2019; ГОСТ 25100-2020; СП 25.13330.2020; СП 497.1325800.2020; ВСН 01-89; МДК 2-03.2003.'),
+    T(''), T('Составил: ________________    Проверил: ________________    Утвердил: ________________'),
+  ];
+  const doc=new Document({sections:[{children:kids}]});
+  const blob=await Packer.toBlob(doc);
+  const a2=document.createElement('a');
+  a2.href=URL.createObjectURL(blob);
+  a2.download='План_мероприятий_'+o.a.replace(/[\s\/]+/g,'_')+'.docx';
+  a2.click();
 }
 /* renderRows с явной таблицей и кнопкой (не пересекается со static-таблицами) */
 function renderRows2(o, tbl, scope, keys, selects, addBtn){
