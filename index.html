@@ -186,6 +186,7 @@
   #logoutBtn{background:none; border:1px solid #3a4c5c; color:#cdd8e2; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:13px}
   #logoutBtn:hover{background:#1b2c3a}
   body.role-view #uploadBtn, body.role-view .addrow, body.role-view .delrow{display:none !important}
+  body:not(.role-edit) #geoPosBtn{display:none}
   body.role-view input.ed, body.role-view select.ed, body.role-view textarea.ed{pointer-events:none; border-color:transparent !important; background:transparent !important}
   /* причины статуса */
   .reasons{margin:6px 0 4px; border:1px solid var(--line); border-radius:6px; background:#fff; padding:6px 10px}
@@ -513,6 +514,56 @@ function drawMarkers(){
   });
   applyFilter();
 }
+
+/* ---------- точное позиционирование по спутнику (оператор) ---------- */
+let GEOVR=JSON.parse(localStorage.getItem('ngk_geo')||'{}');
+DB.objects.forEach(o=>{ const g=GEOVR[o.a]; if(g){ o.lat=g[0]; o.lon=g[1]; o.p='уточнено вручную'; } });
+let geoMode=false, geoCtl=null;
+function hav(a,b,c,d){ const R=6371000, dLa=(c-a)*Math.PI/180, dLo=(d-b)*Math.PI/180;
+  const s=Math.sin(dLa/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dLo/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s)); }
+function toggleGeoMode(){
+  geoMode=!geoMode;
+  if(geoCtl) geoCtl.style.background=geoMode?'#2e7d32':'#fff';
+  map.getContainer().style.cursor=geoMode?'crosshair':'';
+}
+map.on('click', e=>{
+  if(!geoMode||!document.body.classList.contains('role-edit')) return;
+  const {lat, lng}=e.latlng;
+  let best=null, bd=1e9;
+  DB.objects.forEach((o,i)=>{
+    if(o.lat==null) return;
+    const d=hav(lat,lng,o.lat,o.lon);
+    if(d<bd){ bd=d; best=i; }
+  });
+  if(best===null||bd>120){
+    L.popup().setLatLng(e.latlng).setContent('В радиусе 120 м объектов базы нет.').openOn(map);
+    return;
+  }
+  const o=DB.objects[best];
+  const div=document.createElement('div');
+  div.style.cssText='font-size:13px; min-width:210px';
+  div.innerHTML=`<b>${esc(o.a)}</b><br><span style="color:#666">расстояние от точки клика: ${bd.toFixed(0)} м · текущая точность: ${esc(o.p||'—')}</span><br>`;
+  const b1=document.createElement('button'); b1.textContent='Открыть карточку'; b1.style.cssText='margin:4px 4px 0 0; padding:3px 8px; cursor:pointer';
+  b1.onclick=()=>{ map.closePopup(); select(best); };
+  const b2=document.createElement('button'); b2.textContent='📍 Перенести координату сюда'; b2.style.cssText='margin:4px 0 0; padding:3px 8px; cursor:pointer; background:#2e7d32; color:#fff; border:none; border-radius:4px';
+  b2.onclick=()=>{
+    o.lat=+lat.toFixed(6); o.lon=+lng.toFixed(6); o.p='уточнено вручную';
+    GEOVR[o.a]=[o.lat,o.lon]; localStorage.setItem('ngk_geo', JSON.stringify(GEOVR));
+    if(markers[best]) markers[best].setLatLng([o.lat,o.lon]);
+    map.closePopup(); select(best);
+  };
+  div.appendChild(b1); div.appendChild(b2);
+  L.popup().setLatLng(e.latlng).setContent(div).openOn(map);
+});
+// кнопка режима (только оператор — скрывается CSS по роли)
+geoCtl=document.createElement('button');
+geoCtl.id='geoPosBtn';
+geoCtl.textContent='📍 Позиционирование';
+geoCtl.style.cssText='position:absolute; top:84px; left:10px; z-index:700; background:#fff; border:2px solid rgba(0,0,0,.25); border-radius:5px; padding:4px 9px; font-size:12px; cursor:pointer';
+geoCtl.title='Режим уточнения координат: клик по зданию на снимке → ближайший объект → перенос точки';
+geoCtl.onclick=toggleGeoMode;
+document.getElementById('map').appendChild(geoCtl);
 drawMarkers();
 
 /* ---------- шапка ---------- */
@@ -1029,7 +1080,7 @@ function passportBlock(o){
 
 function tabPassport(o, el){
   const wells=o.prof?Object.keys(o.prof):[];
-  const prec={'точный':'точный адрес (OSM)','по улице':'центроид улицы','nominatim':'Nominatim/OSM'}[o.p]||'—';
+  const prec={'точный':'точный адрес (OSM)','по улице':'центроид улицы','nominatim':'Nominatim/OSM','уточнено вручную':'уточнено по спутниковому снимку'}[o.p]||'—';
   el.innerHTML=`
   <div class="normref">Состав сведений: ГОСТ 31937-2024 «Здания и сооружения. Правила обследования и мониторинга технического состояния» (паспорт объекта мониторинга); СП 25.13330.2020 (разд. 5 — принципы использования вечномерзлых грунтов); ПП РФ № 491 (п. 24–26, состав технической документации на МКД). Поля редактируются и сохраняются локально в браузере.</div>
   ${passportBlock(o)}
@@ -1543,6 +1594,11 @@ function repAssessTable(o, tasks){
     <p>${rs?('Сработавшие превентивные правила: '+esc(rs)+'.'):'Превентивные пороги не нарушены.'}</p>
     <p>${esc(conclText(a,sd))}</p>`;
   }
+  const calcApp=(JSON.parse(sessionStorage.getItem('ngk_calcapp')||'[]')).filter(x=>x.addr===o.a);
+  if(calcApp.length){
+    h+=`<h3 style="font-size:12.5px">Приложение. Расчёты</h3>`+
+       calcApp.map((x,i)=>`<p style="margin:4px 0"><b>Расчёт ${i+1}.</b> ${esc(x.calc)} <span style="color:#666">(${x.ts})</span><br><span style="white-space:pre-wrap; font-size:11.5px">${esc(x.text)}</span></p>`).join('');
+  }
   return h;
 }
 function conclText(a,sd){
@@ -1862,7 +1918,12 @@ const NORMS_KB=[
  {n:'СП 22.13330.2011 «Основания зданий»',
   p:['Предельные деформации оснований по типам зданий (табл. Б.1): средняя осадка, разность осадок, крен']},
  {n:'ВСН 01-89 «Предприятия по эксплуатации зданий и сооружений на вечной мерзлоте»',
-  p:['Организация мерзлотно-технического надзора; журналы; периодичность обходов']}];
+  p:['Организация мерзлотно-технического надзора; журналы; периодичность обходов']},
+ {n:'ПП РФ от 13.08.2006 № 491 (ред. 07.03.2025) «Правила содержания общего имущества в многоквартирном доме…»',
+  p:['Состав общего имущества (п. 1–2): помещения общего пользования, ТЕХНИЧЕСКИЕ ПОДВАЛЬЯ (подполья) с инженерными коммуникациями, конструктивные части (фундаменты, несущие стены, плиты перекрытий, крыша), земельный участок с благоустройством',
+     'Пределы надёжности и безопасности фиксируются актом осмотра (п. 6)',
+     'Техническая документация на МКД (п. 24–26): документы технического учёта, акты осмотров и проверок конструктивных частей, журнал осмотра, сметы и описи работ по текущему ремонту, кадастровый план участка',
+     'Ответственные лица обязаны принимать, хранить, вести и передавать техдокументацию (п. 27) — основание для ведения паспорта объекта и раздела «Проектная документация» в данной ГИС-базе']}];
 
 const CALCS=[
  {id:'pile', name:'Несущая способность вмороженной сваи — Q = q_s·U·L + q_p·A (СП 25.13330)'},
@@ -1884,6 +1945,7 @@ function calcInputs(o){
 function tabCalc(o, el){
   const ro=!document.body.classList.contains('role-edit');
   const ci=calcInputs(o);
+  const appN=(JSON.parse(sessionStorage.getItem('ngk_calcapp')||'[]')).filter(x=>x.addr===o.a).length;
   const gm=geodMetrics(o);
   el.innerHTML=`
   <div class="normref">Раздел нормативных расчётов — для пользователя с правами «оператор». Коэффициенты из таблиц СП вводятся вручную и помечены; формулы и подстановка показываются открыто. Данные объекта подставляются автоматически.${ro?' <b>У вас права «наблюдатель» — поля только для чтения.</b>':''}</div>
@@ -1894,12 +1956,27 @@ function tabCalc(o, el){
     </select>
   </div>
   <div id="calcBody"></div>
+  ${appN?`<div class="note">В приложении «Расчёты» отчёта этого объекта: ${appN} поз. · <a href="#" id="calcAppClear" style="color:var(--crit)">очистить</a></div>`:''}
   <div class="sect">Нормативная база агента (сохранена в системе)</div>
   ${NORMS_KB.map(n=>`<details style="margin:3px 0; font-size:12.2px"><summary style="cursor:pointer; font-weight:600">${esc(n.n)}</summary><ul style="margin:4px 0 6px 18px">${n.p.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details>`).join('')}`;
   document.getElementById('calcSel').onchange=e=>{ curCalc=e.target.value; tabCalc(o, el); };
+  const clr=document.getElementById('calcAppClear');
+  if(clr) clr.onclick=e=>{ e.preventDefault(); sessionStorage.setItem('ngk_calcapp', JSON.stringify(JSON.parse(sessionStorage.getItem('ngk_calcapp')||'[]').filter(x=>x.addr!==o.a))); tabCalc(o, el); };
   const body=document.getElementById('calcBody');
   const F=(id,label,unit,val,note)=>`<tr><td>${label}${note?` <span class="note">${note}</span>`:''}</td><td style="white-space:nowrap"><input class="ed" style="width:90px; border:1px solid var(--line); background:#fff" id="ci_${id}" type="number" step="any" value="${val===null||val===undefined?'':val}" ${ro?'disabled':''}> ${unit||''}</td></tr>`;
-  const out=(html)=>{ document.getElementById('calcOut').innerHTML=html; };
+  const out=(html)=>{
+    const el2=document.getElementById('calcOut'); el2.innerHTML=html;
+    const b=document.createElement('button');
+    b.className='addrow'; b.style.cssText='border-style:solid; margin-top:4px; border-color:var(--c-centr); color:var(--c-centr)';
+    b.textContent='📄 В отчёт (в «Приложение. Расчёты»)';
+    b.onclick=()=>{
+      let app=[]; try{ app=JSON.parse(sessionStorage.getItem('ngk_calcapp')||'[]'); }catch(e){}
+      app.push({addr:o.a, calc:CALCS.find(c=>c.id===curCalc).name, text:el2.innerText.trim(), ts:new Date().toISOString().slice(0,16).replace('T',' ')});
+      sessionStorage.setItem('ngk_calcapp', JSON.stringify(app));
+      b.textContent='✔ Добавлено в отчёт объекта';
+    };
+    el2.appendChild(b);
+  };
 
   if(curCalc==='pile'){
     body.innerHTML=`<div class="sect">Несущая способность вмороженной сваи</div>
