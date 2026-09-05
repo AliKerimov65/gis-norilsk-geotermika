@@ -78,10 +78,11 @@
   #settings .save{margin-top:10px; width:100%; padding:6px; background:var(--bg); color:#fff; border:none; border-radius:6px; cursor:pointer}
 
   /* ---------- вкладки карточки объекта ---------- */
-  .tabs{display:flex; flex-wrap:wrap; gap:0; border-bottom:2px solid var(--line); margin:8px 0 12px}
+  .tabs{display:flex; flex-wrap:wrap; gap:0; border-bottom:2px solid var(--line); margin:8px 0 12px; position:sticky; top:0; background:var(--panel); z-index:20; padding-top:4px}
   .tabs button{border:none; background:none; padding:6px 9px; font-size:11.8px; cursor:pointer; color:var(--mut); border-bottom:2px solid transparent; margin-bottom:-2px; font-family:inherit}
-  .tabs button.on{color:var(--ink); font-weight:600; border-bottom-color:var(--c-centr)}
+  .tabs button.on{color:#fff; font-weight:700; background:var(--ok); border-radius:5px 5px 0 0; border-bottom-color:var(--ok)}
   .tabs button:hover{color:var(--ink)}
+  .tabs button.on:hover{color:#fff}
   table.kv input.ed, table.kv select.ed, table.kv textarea.ed{width:100%; padding:2px 6px; border:1px solid transparent; border-radius:4px; font-size:12.8px; background:transparent; font-family:inherit}
   table.kv input.ed:hover, table.kv select.ed:hover, table.kv textarea.ed:hover{border-color:var(--line); background:#fff}
   table.kv input.ed:focus, table.kv select.ed:focus, table.kv textarea.ed:focus{border-color:var(--c-centr); background:#fff; outline:none}
@@ -488,7 +489,10 @@ function statusOf(o){ return statusDetail(o).status; }
 const map = L.map('map',{zoomControl:true}).setView([69.355,88.20], 12);
 window.addEventListener('resize', ()=>map.invalidateSize());
 window.addEventListener('orientationchange', ()=>{ map.invalidateSize(); if(curObj) renderDetail(curObj); });
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+const osmTiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'});
+const satTiles=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19, attribution:'Esri, Maxar, Earthstar Geographics'});
+satTiles.addTo(map);
+L.control.layers({'Спутник (Esri)':satTiles,'Карта (OSM)':osmTiles},null,{position:'topright'}).addTo(map);
 const labelPos = {"Центральный":[69.349,88.19],"Талнах":[69.494,88.40],"Кайеркан":[69.352,87.755]};
 for(const [name, rings] of Object.entries(DB.districts)){
   L.polygon(rings.map(r=>r.map(p=>[p[0],p[1]])),{color:DCOL[name],weight:2.5,fillColor:DCOL[name],fillOpacity:.06,dashArray:'6 4'}).addTo(map);
