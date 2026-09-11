@@ -1,2 +1,8 @@
-# gis-norilsk-geotermika
-Сайт переадресации: alikerimov65.github.io/gis-norilsk-geotermika → aniigb.github.io/gis-norilsk-geotermika (проект перенесён в организацию Aniigb)
+# Переезд проекта
+
+Сайт «ГИС-база геотехнического мониторинга зданий. г. Норильск · АНО «АНИИГБ» им. М.В. Кима» перенесён в организацию **Aniigb**:
+
+- Сайт: https://aniigb.github.io/gis-norilsk-geotermika/
+- Репозиторий: https://github.com/Aniigb/gis-norilsk-geotermika
+
+Этот репозиторий оставлен только для переадресации со старого адреса.
